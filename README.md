@@ -8,14 +8,39 @@
 
 DiffCOT 是一个基于LLM的智能代码审查系统，支持对 GitHub Pull Request 进行自动化代码审查，结合静态分析工具 Semgrep 和 通用大模型分析能力，发现代码中的潜在问题。
 
-## 功能特点
+**Greptile - Benchmark 测试结果可见 [详情](./docs/benchmark_result.md)**
 
-- 🔍 **智能代码审查**: 利用 Claude/GLM 等大语言模型进行深度代码分析
-- 🛡️ **静态分析集成**: 集成 Semgrep 进行 SAST (静态应用安全测试)
-- 📊 **多窗口并行分析**: 支持同时对多个 PR 进行审查
-- 💾 **会话持久化**: SQLite 数据库存储审查历史和对话记录
-- 🎯 **自定义规则库**: 支持自定义 Semgrep 规则和 LLM 提示词规则
-- 🌐 **跨文件分析**: 自动提取相关上下文进行关联分析
+## 目录
+
+- [项目特色总结](#项目特色总结)
+- [安装与使用](#安装与使用)
+  - [环境要求](#环境要求)
+  - [后端运行](#后端运行)
+  - [前端运行](#前端运行)
+  - [配置说明](#配置说明)
+  - [使用流程](#使用流程)
+- [目录结构](#目录结构)
+- [Code Review 工作流程](#code-review-工作流程)
+  - [数据流架构](#数据流架构)
+  - [核心模块交互](#核心模块交互)
+- [自定义规则](#自定义规则)
+- [技术栈](#技术栈)
+- [未来改进](#未来改进)
+- [许可证](#许可证)
+- [贡献](#贡献)
+- [致谢](#致谢)
+
+## 项目特色总结
+
+- 并行混合分析（SAST + LLM）
+- 上下文优先提取与差异导向优先级（diff-imported 优先）
+- 基于 Tree-sitter 的符号表（Symbol Table）用于交叉验证
+- SAST 执行策略与增强（从 patch 重建文件、支持自定义规则）
+- 严格的 Prompt 工程与结构化输出规范
+- PR 大小感知与截断策略（防止 token 溢出/噪声）
+- 健壮的模型输出解析与容错
+- API 客户端的重试/限流处理与稳定性工程
+- 细粒度的过滤规则与信号质量准则（减少误报）
 
 ## 安装与使用
 
@@ -65,6 +90,7 @@ npm install
 # 开发模式运行
 npm run dev:electron
 ```
+
 ### 配置说明
 
 1. **GitHub Token**: 在设置页面配置 GitHub Personal Access Token
@@ -72,10 +98,13 @@ npm run dev:electron
 3. **API Keys**: 在设置页面配置相应的 API Key
 
 ### 使用流程
+
 #### 基础 Code Review 流程
+
 第 1 步：启动后端服务
 第 2 步：启动前端应用 或者直接运行安装好的应用程序。
 第 3 步：点击 New Repo，打开对话窗口。
+
 <div align="center">
   <img src="docs/pic/fig1.png" alt="fig1"/>
 </div>
@@ -97,9 +126,10 @@ npm run dev:electron
 </div>
 第 8 步：分析完成后窗口会弹出 "Comment on GitHub" 的按钮，点击该按钮，审查报告自动提交至远程仓库对应的PR当中。
 
-
 #### Semgrep 自定义规则库添加
+
 第 1 步：点击应用左下角的 Semgrep Rules，进入自定义规则库管理页面。
+
 <div align="center">
   <img src="docs/pic/fig6.png" alt="fig6"/>
 </div>
@@ -187,38 +217,42 @@ flowchart TB
         A[GitHub PR URL] --> B[GitHub API Client]
         B --> C[PR Info / Diff / Files]
         C --> D[Context Extractor]
-        D --> E[Full File Contents]
+        D --> E[完整文件内容 + Diff导入文件]
     end
 
-    subgraph sast["2️⃣ 静态分析 (并行)"]
-        E --> F[Semgrep Analysis]
-        E --> G[Symbol Extraction]
+    subgraph parallel["2️⃣ 并行分析"]
+        E --> F[Semgrep SAST]
+        E --> G[Tree-sitter 符号提取]
+        E --> H[Intent Analysis<br/>意图分析 LLM]
+        F --> I[SAST Findings]
+        G --> J[Symbol Table]
+        H --> K[意图理解结果]
     end
 
-    subgraph prompt["3️⃣ 构建提示词"]
-        F --> H[Build Review Prompt]
-        G --> H
-        E --> H
-        H --> I[Rules + Context + SAST]
+    subgraph combine["3️⃣ 合并分析结果"]
+        I --> L[Combined Prompt]
+        J --> L
+        K --> L
+        E --> L
     end
 
-    subgraph ai["4️⃣ AI 审查"]
-        I --> J[LLM Analysis]
-        J --> K{发现问题?}
-        K -->|否| L{重试 < 5次?}
-        L -->|是| J
-        L -->|否| M[Accept as Clean]
-        K -->|是| M
+    subgraph review["4️⃣ AI 代码审查"]
+        L --> M[LLM Code Review]
+        M --> N{发现问题?}
+        N -->|否| O{重试 < 5次?}
+        O -->|是| M
+        O -->|否| P[Accept as Clean]
+        N -->|是| P
     end
 
     subgraph result["5️⃣ 输出结果"]
-        M --> N[Review Report]
+        P --> Q[Review Report]
     end
 
     style fetch fill:#e1f5fe
-    style sast fill:#fff3e0
-    style prompt fill:#f3e5f5
-    style ai fill:#e8f5e9
+    style parallel fill:#fff3e0
+    style combine fill:#f3e5f5
+    style review fill:#e8f5e9
     style result fill:#fce4ec
 ```
 
@@ -227,42 +261,49 @@ flowchart TB
 ```mermaid
 flowchart LR
     subgraph Input
-        PR[/"🔗 GitHub PR URL"/]
+        PR[/GitHub PR URL/]
     end
 
-    subgraph DataFetch["数据获取层"]
-        GH["📡 GitHub API"]
-        CTX["📦 Context Extractor"]
+    subgraph DataFetch[数据获取层]
+        GH[GitHub API]
+        CTX[Context Extractor]
     end
 
-    subgraph Analysis["分析层 (并行)"]
-        SEM["🔍 Semgrep<br/>静态分析"]
-        SYM["🌳 Tree-sitter<br/>符号提取"]
+    subgraph ParallelAnalysis[并行分析层]
+        SEM[Semgrep SAST]
+        SYM[Tree-sitter 符号提取]
+        INTENT[Intent Analysis 意图分析]
     end
 
-    subgraph AILayer["AI 层"]
-        PROMPT["📝 Prompt Builder"]
-        LLM["🤖 LLM<br/>Claude / GLM"]
+    subgraph Combine[合并层]
+        MERGE[Combined Prompt]
+    end
+
+    subgraph Review[审查层]
+        LLM[LLM Code Review]
     end
 
     subgraph Output
-        REPORT[/"📊 Review Report"/]
+        REPORT[/Review Report/]
     end
 
     PR --> GH
     GH --> CTX
     CTX --> SEM
     CTX --> SYM
-    SEM --> PROMPT
-    SYM --> PROMPT
-    CTX --> PROMPT
-    PROMPT --> LLM
+    CTX --> INTENT
+    SEM --> MERGE
+    SYM --> MERGE
+    INTENT --> MERGE
+    CTX --> MERGE
+    MERGE --> LLM
     LLM --> REPORT
 
     style Input fill:#f8f9fa,stroke:#dee2e6
     style DataFetch fill:#e3f2fd,stroke:#90caf9
-    style Analysis fill:#fff8e1,stroke:#ffecb3
-    style AILayer fill:#f3e5f5,stroke:#ce93d8
+    style ParallelAnalysis fill:#fff8e1,stroke:#ffecb3
+    style Combine fill:#e1bee7,stroke:#ce93d8
+    style Review fill:#c8e6c9,stroke:#81c784
     style Output fill:#e8f5e9,stroke:#a5d6a7
 ```
 
@@ -347,6 +388,14 @@ rules:
 
 - Anthropic Claude (claude-opus-4-5-20251101)
 - 智谱 GLM (glm-4.6)
+
+## 未来改进
+
+- 增加“多模型投票/集成”：对同一 PR 用不同 LLM（Claude/GLM/其他）并做投票或置信度加权，减少单模型偏差
+- 自动化监控面板：记录每次审查的 precision/recall、人工采纳率与模型响应时间，用于长期回归分析
+- 扩展符号提取覆盖（更多语言）并增强 import resolution（支持 monorepo、node_modules mapping）
+- 支持更多代码分析工具
+- 扩充审查规则库
 
 ## 许可证
 
