@@ -1,0 +1,4151 @@
+rules:
+  # ============ Mutable Default Arguments ============
+
+  - id: mutable-default-datetime-now
+    languages: [python]
+    severity: ERROR
+    message: |
+      Dataclass field uses `$FUNC()` as default value.
+      This is evaluated ONCE at class definition time, not at instance creation.
+      All instances will share the SAME timestamp.
+      Use `field(default_factory=$FUNC)` instead.
+    patterns:
+      - pattern-inside: |
+          @dataclass
+          class $CLASS:
+              ...
+      - pattern: |
+          $FIELD: $TYPE = $MODULE.now(...)
+    metadata:
+      category: correctness
+      technology: [python]
+      cwe: "CWE-1188: Insecure Default Initialization of Resource"
+
+  - id: mutable-default-uuid
+    languages: [python]
+    severity: ERROR
+    message: |
+      Dataclass field uses uuid function as default value.
+      This is evaluated ONCE at class definition time, not at instance creation.
+      All instances will share the SAME UUID.
+      Use `field(default_factory=uuid4)` or similar instead.
+    patterns:
+      - pattern-inside: |
+          @dataclass
+          class $CLASS:
+              ...
+      - pattern-either:
+          - pattern: |
+              $FIELD: $TYPE = uuid4(...)
+          - pattern: |
+              $FIELD: $TYPE = uuid.uuid4(...)
+    metadata:
+      category: correctness
+      technology: [python]
+
+  - id: mutable-default-list
+    languages: [python]
+    severity: ERROR
+    message: |
+      Dataclass field uses mutable default value `[]`.
+      All instances will share the SAME list.
+      Use `field(default_factory=list)` instead.
+    patterns:
+      - pattern-inside: |
+          @dataclass
+          class $CLASS:
+              ...
+      - pattern: |
+          $FIELD: $TYPE = []
+    metadata:
+      category: correctness
+      technology: [python]
+
+  - id: mutable-default-dict
+    languages: [python]
+    severity: ERROR
+    message: |
+      Dataclass field uses mutable default value `{}`.
+      All instances will share the SAME dict.
+      Use `field(default_factory=dict)` instead.
+    patterns:
+      - pattern-inside: |
+          @dataclass
+          class $CLASS:
+              ...
+      - pattern: |
+          $FIELD: $TYPE = {}
+    metadata:
+      category: correctness
+      technology: [python]
+
+  - id: mutable-default-set
+    languages: [python]
+    severity: ERROR
+    message: |
+      Dataclass field uses mutable default value `set()`.
+      All instances will share the SAME set.
+      Use `field(default_factory=set)` instead.
+    patterns:
+      - pattern-inside: |
+          @dataclass
+          class $CLASS:
+              ...
+      - pattern: |
+          $FIELD: $TYPE = set()
+    metadata:
+      category: correctness
+      technology: [python]
+
+  - id: function-mutable-default-list
+    languages: [python]
+    severity: WARNING
+    message: |
+      Function parameter uses mutable default value `[]`.
+      This default is shared across all calls.
+      Use `None` and initialize inside the function.
+    pattern: |
+      def $FUNC(..., $PARAM=[], ...):
+          ...
+    metadata:
+      category: correctness
+      technology: [python]
+
+  - id: function-mutable-default-dict
+    languages: [python]
+    severity: WARNING
+    message: |
+      Function parameter uses mutable default value `{}`.
+      This default is shared across all calls.
+      Use `None` and initialize inside the function.
+    pattern: |
+      def $FUNC(..., $PARAM={}, ...):
+          ...
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # ============ Modified Variable Not Used ============
+
+  - id: dict-copy-modified-original-returned
+    languages: [python]
+    severity: WARNING
+    message: |
+      Variable '$COPY' is created as a copy and modified,
+      but the original is returned instead. Did you mean to return '$COPY'?
+    pattern-either:
+      - pattern: |
+          $COPY = $ORIGINAL.copy()
+          ...
+          $COPY[$KEY] = $VALUE
+          ...
+          return $ORIGINAL
+      - pattern: |
+          $COPY = $ORIGINAL.copy()
+          ...
+          $COPY[$KEY] = $VALUE
+          ...
+          return {..., "$FIELD": $ORIGINAL, ...}
+      - pattern: |
+          $COPY = dict($ORIGINAL)
+          ...
+          $COPY[$KEY] = $VALUE
+          ...
+          return $ORIGINAL
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # Handle attribute access patterns like env.config.copy()
+  - id: attr-copy-modified-original-returned
+    languages: [python]
+    severity: INFO
+    message: |
+      Variable '$COPY' is created as a copy of '$OBJ.$ATTR' and modified,
+      but the original '$OBJ.$ATTR' is returned instead. Did you mean to return '$COPY'?
+    pattern-either:
+      - pattern: |
+          $COPY = $OBJ.$ATTR.copy()
+          ...
+          $COPY[$KEY] = $VALUE
+          ...
+          return $OBJ.$ATTR
+      - pattern: |
+          $COPY = $OBJ.$ATTR.$ATTR2.copy()
+          ...
+          $COPY[$KEY] = $VALUE
+          ...
+          return $OBJ.$ATTR.$ATTR2
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # CRITICAL: Deep attribute copy modified but original used in returned dict
+  # Pattern: config = obj.a.b.copy(); config[x] = y; return {..., "key": obj.a.b, ...}
+  - id: deep-attr-copy-modified-original-in-dict
+    languages: [python]
+    severity: INFO
+    message: |
+      Variable '$COPY' is created as a copy of '$A.$B.$C' and modified,
+      but the original '$A.$B.$C' is used in the returned dict instead.
+      Did you mean to use '$COPY'?
+    pattern-either:
+      - pattern: |
+          $COPY = $A.$B.$C.copy()
+          ...
+          $COPY[$KEY] = $VALUE
+          ...
+          return {..., $A.$B.$C, ...}
+      - pattern: |
+          $COPY = $A.$B.$C.copy()
+          ...
+          $COPY[$KEY] = $VALUE
+          ...
+          return {..., "$FIELD": $A.$B.$C, ...}
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # Two-level attribute: obj.attr.copy() then original in dict
+  - id: attr-copy-modified-original-in-dict
+    languages: [python]
+    severity: INFO
+    message: |
+      Variable '$COPY' is created as a copy of '$A.$B' and modified,
+      but the original '$A.$B' is used in the returned dict instead.
+      Did you mean to use '$COPY'?
+    pattern-either:
+      - pattern: |
+          $COPY = $A.$B.copy()
+          ...
+          $COPY[$KEY] = $VALUE
+          ...
+          return {..., $A.$B, ...}
+      - pattern: |
+          $COPY = $A.$B.copy()
+          ...
+          $COPY[$KEY] = $VALUE
+          ...
+          return {..., "$FIELD": $A.$B, ...}
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # Simple variable copy modified but original in dict
+  - id: copy-modified-original-in-dict
+    languages: [python]
+    severity: INFO
+    message: |
+      Variable '$COPY' is created as a copy of '$ORIGINAL' and modified,
+      but the original '$ORIGINAL' is used in the returned dict instead.
+      Did you mean to use '$COPY'?
+    pattern-either:
+      - pattern: |
+          $COPY = $ORIGINAL.copy()
+          ...
+          $COPY[$KEY] = $VALUE
+          ...
+          return {..., $ORIGINAL, ...}
+      - pattern: |
+          $COPY = $ORIGINAL.copy()
+          ...
+          $COPY[$KEY] = $VALUE
+          ...
+          return {..., "$FIELD": $ORIGINAL, ...}
+      - pattern: |
+          $COPY = dict($ORIGINAL)
+          ...
+          $COPY[$KEY] = $VALUE
+          ...
+          return {..., $ORIGINAL, ...}
+      - pattern: |
+          $COPY = dict($ORIGINAL)
+          ...
+          $COPY[$KEY] = $VALUE
+          ...
+          return {..., "$FIELD": $ORIGINAL, ...}
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # List copy modified but original returned
+  - id: list-copy-modified-original-returned
+    languages: [python]
+    severity: INFO
+    message: |
+      Variable '$COPY' is created as a copy and modified via append/extend,
+      but the original is returned instead. Did you mean to return '$COPY'?
+    pattern-either:
+      - pattern: |
+          $COPY = $ORIGINAL.copy()
+          ...
+          $COPY.append($ITEM)
+          ...
+          return $ORIGINAL
+      - pattern: |
+          $COPY = $ORIGINAL.copy()
+          ...
+          $COPY.extend($ITEMS)
+          ...
+          return $ORIGINAL
+      - pattern: |
+          $COPY = list($ORIGINAL)
+          ...
+          $COPY.append($ITEM)
+          ...
+          return $ORIGINAL
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # Deepcopy modified but original returned
+  - id: deepcopy-modified-original-returned
+    languages: [python]
+    severity: INFO
+    message: |
+      Variable '$COPY' is created via deepcopy and modified,
+      but the original is returned instead. Did you mean to return '$COPY'?
+    pattern-either:
+      - pattern: |
+          $COPY = copy.deepcopy($ORIGINAL)
+          ...
+          $COPY[$KEY] = $VALUE
+          ...
+          return $ORIGINAL
+      - pattern: |
+          $COPY = deepcopy($ORIGINAL)
+          ...
+          $COPY[$KEY] = $VALUE
+          ...
+          return $ORIGINAL
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # ============ Falsy Value Confusion ============
+  - id: falsy-or-default-numeric
+    languages: [python]
+    severity: INFO
+    message: |
+      Using `$VAR or $DEFAULT` pattern. If `$VAR` can be 0 or 0.0 as a valid value,
+      this will incorrectly use the default. Consider using:
+      `$VAR if $VAR is not None else $DEFAULT`
+    patterns:
+      - pattern: $X = $VAR or $DEFAULT
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: '.*(_rate|_count|_limit|_threshold|_percent|_ratio|_timeout|_delay|_interval)$'
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # Generic pattern: truthy check on numeric-sounding variables
+  - id: falsy-if-numeric
+    languages: [python]
+    severity: INFO
+    message: |
+      Using `if $VAR:` check. If `$VAR` can be 0 or 0.0 as a valid value,
+      this condition will be False. Consider using `if $VAR is not None:` instead.
+    patterns:
+      - pattern: |
+          if $VAR:
+              ...
+      - pattern-not: |
+          if $VAR is not None:
+              ...
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: '.*(_rate|_count|_limit|_threshold|_percent|_ratio|_timeout|_delay|_interval)$'
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # ============ TypeScript/JavaScript Patterns ============
+
+  - id: ts-mutable-default-array
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: |
+      Function parameter uses mutable default value `[]`.
+      This default is shared if the array is mutated.
+      Consider using a new array inside the function.
+    pattern-either:
+      - pattern: |
+          function $FUNC(..., $PARAM = [], ...) { ... }
+      - pattern: |
+          const $FUNC = (..., $PARAM = [], ...) => { ... }
+      - pattern: |
+          ($PARAM = []) => { ... }
+    metadata:
+      category: correctness
+      technology: [typescript, javascript]
+
+  - id: ts-mutable-default-object
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: |
+      Function parameter uses mutable default value `{}`.
+      This default is shared if the object is mutated.
+      Consider using a new object inside the function.
+    pattern-either:
+      - pattern: |
+          function $FUNC(..., $PARAM = {}, ...) { ... }
+      - pattern: |
+          const $FUNC = (..., $PARAM = {}, ...) => { ... }
+      - pattern: |
+          ($PARAM = {}) => { ... }
+    metadata:
+      category: correctness
+      technology: [typescript, javascript]
+
+  # ============ Standard Library API Misuse ============
+  # NOTE: Semgrep cannot do type inference, so these rules use variable name patterns
+  # to reduce false positives. They may still have some false positives/negatives.
+
+  # Python collection method misuse - using variable name patterns for precision
+  - id: list-typed-var-add
+    languages: [python]
+    severity: WARNING
+    message: |
+      `list.add()` does not exist. Did you mean `append()` or `extend()`?
+      If this is a set, use `add()`. If this is a list, use `append()`.
+    patterns:
+      - pattern: $VAR.add($ITEM)
+      - metavariable-regex:
+          metavariable: $VAR
+          # Match list-like variable names but not set-like ones (exclude unique_*)
+          regex: '^(?!unique_)(.*_)?(list|items|elements|entries|results|values|records|rows|lines)$'
+    metadata:
+      category: correctness
+      technology: [python]
+
+  - id: set-typed-var-append
+    languages: [python]
+    severity: WARNING
+    message: |
+      `set.append()` does not exist. Use `set.add()` for single items
+      or `set.update()` for multiple items.
+    patterns:
+      - pattern: $VAR.append($ITEM)
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: '^(.*_)?(set|seen_\w+|processed_\w+|unique_\w+|visited_\w+)$|^(tag|id)s$'
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # Queue API misuse - shutdown was added in Python 3.13
+  - id: queue-shutdown-py313
+    languages: [python]
+    severity: WARNING
+    message: |
+      `Queue.shutdown()` was added in Python 3.13.
+      If targeting earlier Python versions, this will raise AttributeError.
+      Consider using a sentinel value or threading.Event for shutdown signaling.
+    patterns:
+      - pattern-either:
+          - pattern: $Q.shutdown()
+          - pattern: $Q.shutdown($ARGS)
+      - metavariable-regex:
+          metavariable: $Q
+          # Match queue-like variable names
+          regex: '^(.*_)?(queue|q|que|queues)$'
+    metadata:
+      category: correctness
+      technology: [python]
+      cwe: "CWE-474: Use of Function with Inconsistent Implementations"
+
+  # Lock API misuse
+  - id: lock-is-locked-typo
+    languages: [python]
+    severity: ERROR
+    message: |
+      `Lock.is_locked()` does not exist. Use `Lock.locked()` instead.
+    patterns:
+      - pattern: $LOCK.is_locked()
+      - metavariable-regex:
+          metavariable: $LOCK
+          regex: '^(.*_)?(lock|mutex|semaphore)s?$'
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # Iterating over dict and expecting key-value pairs
+  - id: dict-iterate-expecting-items
+    languages: [python]
+    severity: WARNING
+    message: |
+      Iterating over a dict directly yields only keys.
+      If you need key-value pairs, use `dict.items()`.
+      If you need only values, use `dict.values()`.
+    patterns:
+      - pattern: |
+          for $K, $V in $DICT:
+              ...
+      - metavariable-regex:
+          metavariable: $DICT
+          regex: '^(.*_)?(dict|data|config|settings|mapping|map|cache|params|options|kwargs)s?$'
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # ============ Go Patterns ============
+
+  - id: go-shadow-variable-return
+    languages: [go]
+    severity: WARNING
+    message: |
+      Variable '$VAR' is assigned but might shadow another variable.
+      The original value is returned instead.
+    pattern: |
+      $VAR := $EXPR
+      ...
+      $VAR = $NEWVAL
+      ...
+      return $EXPR
+    metadata:
+      category: correctness
+      technology: [go]
+
+  - id: go-nil-check-after-use
+    languages: [go]
+    severity: ERROR
+    message: |
+      Variable '$VAR' is used before nil check.
+      This will cause a nil pointer dereference if '$VAR' is nil.
+      Move the nil check before using '$VAR'.
+    pattern: |
+      $X := $VAR.$METHOD(...)
+      ...
+      if $VAR == nil { ... }
+    metadata:
+      category: correctness
+      technology: [go]
+
+  - id: go-error-not-checked
+    languages: [go]
+    severity: WARNING
+    message: |
+      Error returned from function call is not checked.
+      This can hide failures and cause unexpected behavior.
+      Always check errors in Go.
+    pattern-either:
+      - pattern: |
+          $X, _ := $FUNC(...)
+      - pattern: |
+          $X, _ = $FUNC(...)
+    metadata:
+      category: correctness
+      technology: [go]
+
+  - id: go-defer-in-loop
+    languages: [go]
+    severity: WARNING
+    message: |
+      Using defer inside a loop can cause resource leaks.
+      Defer is not executed until the function returns, not at the end of each loop iteration.
+      Consider moving the deferred operation to a separate function or use explicit cleanup.
+    pattern: |
+      for ... {
+        ...
+        defer $FUNC(...)
+        ...
+      }
+    metadata:
+      category: correctness
+      technology: [go]
+
+  - id: go-append-to-wrong-slice
+    languages: [go]
+    severity: WARNING
+    message: |
+      Result of append is not assigned to the original slice.
+      In Go, `append` may return a new slice if capacity is exceeded.
+      Always assign: `$SLICE = append($SLICE, ...)`
+    patterns:
+      - pattern: |
+          append($SLICE, $ITEMS)
+      - pattern-not: |
+          $X = append($SLICE, $ITEMS)
+      - pattern-not: |
+          $X := append($SLICE, $ITEMS)
+      - pattern-not: |
+          return append($SLICE, $ITEMS)
+    metadata:
+      category: correctness
+      technology: [go]
+
+  - id: go-sync-mutex-copy
+    languages: [go]
+    severity: ERROR
+    message: |
+      sync.Mutex or sync.RWMutex should not be copied.
+      Copying a mutex can cause data races and deadlocks.
+      Pass by pointer instead.
+    pattern-either:
+      - pattern: |
+          func $FUNC($PARAM sync.Mutex) { ... }
+      - pattern: |
+          func $FUNC($PARAM sync.RWMutex) { ... }
+    metadata:
+      category: correctness
+      technology: [go]
+
+  # ============ Java Patterns ============
+
+  - id: java-mutable-static-collection
+    languages: [java]
+    severity: WARNING
+    message: |
+      Static field is initialized with a mutable collection.
+      This is shared across all instances and threads, which can cause unexpected behavior.
+      Consider using Collections.unmodifiableList/Map/Set or making it non-static.
+    pattern-either:
+      - pattern: |
+          static $TYPE $FIELD = new ArrayList<$T>(...);
+      - pattern: |
+          static $TYPE $FIELD = new HashMap<$K, $V>(...);
+      - pattern: |
+          static $TYPE $FIELD = new HashSet<$T>(...);
+      - pattern: |
+          static $TYPE $FIELD = new LinkedList<$T>(...);
+    metadata:
+      category: correctness
+      technology: [java]
+
+  - id: java-equals-hashcode-mismatch
+    languages: [java]
+    severity: ERROR
+    message: |
+      Class overrides equals() but not hashCode() (or vice versa).
+      This violates the contract and causes issues with HashMap, HashSet, etc.
+      Always override both methods together.
+    pattern-either:
+      - patterns:
+          - pattern-inside: |
+              class $CLASS {
+                ...
+              }
+          - pattern: |
+              public boolean equals(Object $OBJ) { ... }
+          - pattern-not-inside: |
+              class $CLASS {
+                ...
+                public int hashCode() { ... }
+                ...
+              }
+      - patterns:
+          - pattern-inside: |
+              class $CLASS {
+                ...
+              }
+          - pattern: |
+              public int hashCode() { ... }
+          - pattern-not-inside: |
+              class $CLASS {
+                ...
+                public boolean equals(Object $OBJ) { ... }
+                ...
+              }
+    metadata:
+      category: correctness
+      technology: [java]
+
+  - id: java-string-comparison-with-equals
+    languages: [java]
+    severity: WARNING
+    message: |
+      String comparison using == instead of .equals().
+      Use .equals() for string content comparison.
+      == compares object references, not string content.
+    pattern-either:
+      - pattern: |
+          (String $S1) == $S2
+      - pattern: |
+          $S1 == (String $S2)
+    metadata:
+      category: correctness
+      technology: [java]
+
+  - id: java-catch-null-pointer
+    languages: [java]
+    severity: WARNING
+    message: |
+      Catching NullPointerException is usually a code smell.
+      Instead of catching NPE, check for null before accessing the object.
+      NPE often indicates a programming error that should be fixed.
+    pattern: |
+      catch (NullPointerException $E) { ... }
+    metadata:
+      category: correctness
+      technology: [java]
+
+  - id: java-synchronized-on-boxed-primitive
+    languages: [java]
+    severity: ERROR
+    message: |
+      Synchronizing on a boxed primitive (Integer, Long, etc.) is dangerous.
+      Boxed primitives may be cached and shared, causing unexpected locking behavior.
+      Use a dedicated lock object instead.
+    pattern-either:
+      - pattern: |
+          synchronized ($VAR) { ... }
+    metadata:
+      category: correctness
+      technology: [java]
+
+  # ============ TypeScript/JavaScript Additional Patterns ============
+
+  # Unsafe destructuring from nullish coalescing with empty array
+  - id: ts-unsafe-destructure-nullish-array
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: |
+      Destructuring from `$EXPR ?? []` may result in undefined variable.
+      If `$EXPR` is null/undefined, the empty array fallback means '$VAR' will be undefined.
+      Accessing properties on '$VAR' will cause TypeError.
+      Consider: `const $VAR = ($EXPR ?? [])[0];` then check `if ($VAR)` before use.
+    pattern-either:
+      - pattern: |
+          const [$VAR] = $EXPR ?? [];
+      - pattern: |
+          let [$VAR] = $EXPR ?? [];
+      - pattern: |
+          const [$VAR, ...] = $EXPR ?? [];
+      - pattern: |
+          let [$VAR, ...] = $EXPR ?? [];
+    metadata:
+      category: correctness
+      technology: [typescript, javascript]
+
+  # Unsafe: destructure then immediately access property without check
+  - id: ts-destructure-immediate-access
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: |
+      Variable '$VAR' from array destructuring is accessed immediately without null check.
+      If array is empty, '$VAR' is undefined and '$VAR.$PROP' causes TypeError.
+      Add a null check before accessing properties.
+    patterns:
+      - pattern: |
+          const [$VAR, ...] = $ARRAY ?? [];
+          ...
+          $VAR.$PROP
+      - pattern-not: |
+          const [$VAR, ...] = $ARRAY ?? [];
+          ...
+          if ($VAR) { ... }
+      - pattern-not: |
+          const [$VAR, ...] = $ARRAY ?? [];
+          ...
+          $VAR?.$PROP
+    metadata:
+      category: correctness
+      technology: [typescript, javascript]
+
+  - id: ts-async-without-await
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: |
+      Async function does not use await. Consider removing async keyword
+      or ensure you're awaiting something inside this function.
+    patterns:
+      - pattern: |
+          async function $FUNC(...) { ... }
+      - pattern-not: |
+          async function $FUNC(...) {
+            ...
+            await $EXPR
+            ...
+          }
+    metadata:
+      category: correctness
+      technology: [typescript, javascript]
+
+  - id: ts-array-foreach-async
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: |
+      Using async callback with forEach does not wait for completion.
+      forEach ignores the returned promises. Use for...of loop instead,
+      or Promise.all with map() if parallel execution is desired.
+    pattern: |
+      $ARR.forEach(async ($ARGS) => { ... })
+    metadata:
+      category: correctness
+      technology: [typescript, javascript]
+
+  - id: ts-equality-null-undefined
+    languages: [typescript, javascript]
+    severity: INFO
+    message: |
+      Using == for null/undefined comparison.
+      Consider using === for strict equality, or ?? for nullish coalescing.
+    pattern-either:
+      - pattern: |
+          $X == null
+      - pattern: |
+          $X == undefined
+      - pattern: |
+          null == $X
+      - pattern: |
+          undefined == $X
+    metadata:
+      category: correctness
+      technology: [typescript, javascript]
+
+  - id: ts-useless-typeof
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: |
+      Comparing typeof to an invalid type string.
+      Valid typeof results are: "undefined", "object", "boolean", "number",
+      "string", "function", "symbol", "bigint".
+    pattern-either:
+      - pattern: |
+          typeof $X === "array"
+      - pattern: |
+          typeof $X === "null"
+      - pattern: |
+          typeof $X === "integer"
+      - pattern: |
+          typeof $X === "float"
+    metadata:
+      category: correctness
+      technology: [typescript, javascript]
+
+  - id: ts-delete-array-element
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: |
+      Using delete on array element leaves a hole (undefined).
+      Use splice() to remove elements and reindex, or filter() to create new array.
+    pattern: |
+      delete $ARR[$INDEX]
+    metadata:
+      category: correctness
+      technology: [typescript, javascript]
+
+  # ============ SQL / Database Patterns ============
+
+  # SQL ANY() with array interpolation - matches any tagged template (sql`, Prisma.sql`, db.sql`, etc.)
+  - id: sql-any-empty-array
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: |
+      SQL ANY() operator with array interpolation detected.
+      If the array is empty, PostgreSQL generates invalid SQL: `ANY({})` or `ANY(ARRAY[])`.
+      This causes runtime SQL syntax errors.
+      Fix: Add a length check before using ANY():
+        if (arr.length > 0) { ... query with ANY ... }
+      Note: This rule uses regex matching and may flag code that already has guards.
+    pattern-regex: '`[^`]*\bANY\s*\(\s*\$\{[^}]+\}\s*\)[^`]*`'
+    metadata:
+      category: correctness
+      technology: [typescript, javascript, sql]
+
+  # SQL IN() with array interpolation - matches any tagged template
+  - id: sql-in-empty-array
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: |
+      SQL IN() clause with array interpolation detected.
+      If the array is empty, this generates invalid SQL: `IN ()`.
+      This causes runtime SQL syntax errors.
+      Fix: Add a length check before using IN():
+        if (arr.length > 0) { ... query with IN ... }
+    pattern-regex: '`[^`]*\bIN\s*\(\s*\$\{[^}]+\}\s*\)[^`]*`'
+    metadata:
+      category: correctness
+      technology: [typescript, javascript, sql]
+
+  # SQL NOT IN with empty array - matches any tagged template
+  - id: sql-not-in-empty-array
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: |
+      SQL NOT IN() clause with array interpolation detected.
+      If the array is empty, `NOT IN ()` is invalid SQL syntax.
+      Even if it were valid, an empty NOT IN would match all rows (probably not intended).
+      Fix: Handle the empty array case explicitly.
+    pattern-regex: '`[^`]*\bNOT\s+IN\s*\(\s*\$\{[^}]+\}\s*\)[^`]*`'
+    metadata:
+      category: correctness
+      technology: [typescript, javascript, sql]
+
+  # Knex.js whereIn with array
+  - id: knex-wherein-empty-array
+    languages: [typescript, javascript]
+    severity: INFO
+    message: |
+      Knex whereIn() with array variable.
+      If the array is empty, Knex generates `WHERE 1 = 0` which returns no rows.
+      This may be intentional, but often indicates a missing empty array check.
+      Consider adding: `if (arr.length > 0)` before the query.
+    pattern-either:
+      - pattern: $QUERY.whereIn($COL, $ARR)
+      - pattern: $QUERY.whereNotIn($COL, $ARR)
+    metadata:
+      category: correctness
+      technology: [typescript, javascript, knex]
+
+  # TypeORM In() with array
+  - id: typeorm-in-empty-array
+    languages: [typescript, javascript]
+    severity: INFO
+    message: |
+      TypeORM In() operator with array variable.
+      If the array is empty, TypeORM may generate invalid SQL or unexpected behavior.
+      Consider adding an empty array check before using In().
+    pattern: In($ARR)
+    metadata:
+      category: correctness
+      technology: [typescript, javascript, typeorm]
+
+  # Python: SQLAlchemy in_() with empty list
+  - id: python-sqlalchemy-in-empty-list
+    languages: [python]
+    severity: WARNING
+    message: |
+      SQLAlchemy in_() with list variable.
+      If the list is empty, this generates `IN ()` which is invalid SQL.
+      Fix: Check list length before using in_():
+        if items: query.filter(Model.col.in_(items))
+    pattern-either:
+      - pattern: $COL.in_($LIST)
+      - pattern: $COL.notin_($LIST)
+    metadata:
+      category: correctness
+      technology: [python, sqlalchemy]
+
+  # Python: Django filter with __in and empty list
+  - id: python-django-in-empty-list
+    languages: [python]
+    severity: INFO
+    message: |
+      Django __in filter with list variable.
+      If the list is empty, Django returns an empty QuerySet.
+      This may be intentional, but often indicates a missing empty list check.
+      Consider: `if items: queryset.filter(field__in=items)`
+    pattern-regex: '\.filter\([^)]*__in\s*=\s*\w+'
+    metadata:
+      category: correctness
+      technology: [python, django]
+
+  # Go: SQL query with empty slice in IN clause
+  - id: go-sql-in-empty-slice
+    languages: [go]
+    severity: WARNING
+    message: |
+      SQL IN clause built with slice interpolation.
+      If the slice is empty, this may generate invalid SQL or return no results unexpectedly.
+      Check slice length before executing query.
+    pattern-regex: 'db\.(Query|Exec)\([^)]*IN\s*\([^)]*\.\.\.'
+    metadata:
+      category: correctness
+      technology: [go, sql]
+
+  # SQL string concatenation (injection risk)
+  - id: sql-string-concatenation
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: |
+      SQL query built with string concatenation is vulnerable to SQL injection.
+      Use parameterized queries or prepared statements instead.
+    pattern-either:
+      - pattern: |
+          $QUERY = "SELECT " + $VAR + ...
+      - pattern: |
+          $QUERY = "INSERT " + $VAR + ...
+      - pattern: |
+          $QUERY = "UPDATE " + $VAR + ...
+      - pattern: |
+          $QUERY = "DELETE " + $VAR + ...
+      - pattern: |
+          $QUERY = `SELECT ${$VAR} FROM...`
+      - pattern: |
+          $QUERY = `...WHERE ${$VAR}...`
+    metadata:
+      category: security
+      technology: [typescript, javascript, sql]
+      cwe: "CWE-89: SQL Injection"
+
+  # Python: SQL with format string
+  - id: python-sql-format-string
+    languages: [python]
+    severity: ERROR
+    message: |
+      SQL query built with f-string or .format() is vulnerable to SQL injection.
+      Use parameterized queries with placeholders instead.
+      Example: cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+    pattern-either:
+      - pattern: |
+          f"SELECT ... {$VAR} ..."
+      - pattern: |
+          f"INSERT ... {$VAR} ..."
+      - pattern: |
+          f"UPDATE ... {$VAR} ..."
+      - pattern: |
+          f"DELETE ... {$VAR} ..."
+      - pattern: |
+          "SELECT ...".format($VAR)
+      - pattern: |
+          "INSERT ...".format($VAR)
+      - pattern: |
+          "UPDATE ...".format($VAR)
+      - pattern: |
+          "DELETE ...".format($VAR)
+    metadata:
+      category: security
+      technology: [python, sql]
+      cwe: "CWE-89: SQL Injection"
+
+  # Python: SQLAlchemy text() with format string
+  - id: python-sqlalchemy-text-injection
+    languages: [python]
+    severity: ERROR
+    message: |
+      Using text() with f-string or .format() is vulnerable to SQL injection.
+      Use bindparams or parameterized queries instead.
+      Example: text("SELECT * FROM users WHERE id = :id").bindparams(id=user_id)
+    pattern-either:
+      - pattern: |
+          text(f"... {$VAR} ...")
+      - pattern: |
+          text("...".format($VAR))
+    metadata:
+      category: security
+      technology: [python, sqlalchemy]
+      cwe: "CWE-89: SQL Injection"
+
+  # Java: SQL string concatenation
+  - id: java-sql-string-concatenation
+    languages: [java]
+    severity: ERROR
+    message: |
+      SQL query built with string concatenation is vulnerable to SQL injection.
+      Use PreparedStatement with parameterized queries instead.
+    pattern-either:
+      - pattern: |
+          $STMT.executeQuery("SELECT " + $VAR + ...)
+      - pattern: |
+          $STMT.executeQuery("INSERT " + $VAR + ...)
+      - pattern: |
+          $STMT.executeQuery("UPDATE " + $VAR + ...)
+      - pattern: |
+          $STMT.executeQuery("DELETE " + $VAR + ...)
+      - pattern: |
+          $STMT.execute("SELECT " + $VAR + ...)
+      - pattern: |
+          $STMT.execute("INSERT " + $VAR + ...)
+    metadata:
+      category: security
+      technology: [java, sql]
+      cwe: "CWE-89: SQL Injection"
+
+  # Go: SQL string concatenation
+  - id: go-sql-string-concatenation
+    languages: [go]
+    severity: ERROR
+    message: |
+      SQL query built with string concatenation or fmt.Sprintf is vulnerable to SQL injection.
+      Use parameterized queries with placeholders ($1, $2 or ?) instead.
+    pattern-either:
+      - pattern: |
+          $DB.Query("SELECT " + $VAR + ...)
+      - pattern: |
+          $DB.Query(fmt.Sprintf("SELECT %s...", $VAR))
+      - pattern: |
+          $DB.Exec("INSERT " + $VAR + ...)
+      - pattern: |
+          $DB.Exec(fmt.Sprintf("INSERT %s...", $VAR))
+    metadata:
+      category: security
+      technology: [go, sql]
+      cwe: "CWE-89: SQL Injection"
+
+  # Ruby: SQL string interpolation
+  - id: ruby-sql-string-interpolation
+    languages: [ruby]
+    severity: ERROR
+    message: |
+      SQL query built with string interpolation is vulnerable to SQL injection.
+      Use parameterized queries or ActiveRecord's safe methods instead.
+    pattern-either:
+      - pattern: |
+          $MODEL.where("... #{$VAR} ...")
+      - pattern: |
+          $CONN.execute("SELECT ... #{$VAR} ...")
+      - pattern: |
+          $CONN.execute("INSERT ... #{$VAR} ...")
+    metadata:
+      category: security
+      technology: [ruby, sql]
+      cwe: "CWE-89: SQL Injection"
+
+  # ============ Ruby Patterns ============
+
+  - id: ruby-mutable-default-argument
+    languages: [ruby]
+    severity: WARNING
+    message: |
+      Using mutable object as default argument.
+      Default arguments are evaluated once at method definition.
+      Use nil and create new object inside method instead.
+    pattern-either:
+      - pattern: |
+          def $METHOD(..., $PARAM = [], ...)
+            ...
+          end
+      - pattern: |
+          def $METHOD(..., $PARAM = {}, ...)
+            ...
+          end
+    metadata:
+      category: correctness
+      technology: [ruby]
+
+  - id: ruby-exception-rescue-all
+    languages: [ruby]
+    severity: WARNING
+    message: |
+      Rescuing Exception catches all exceptions including system exits.
+      Use StandardError or specific exception classes instead.
+      Exception includes SystemExit, Interrupt, etc.
+    pattern: |
+      rescue Exception
+        ...
+    metadata:
+      category: correctness
+      technology: [ruby]
+
+  - id: ruby-eval-security
+    languages: [ruby]
+    severity: ERROR
+    message: |
+      Using eval with user input is dangerous and can lead to code injection.
+      Avoid eval when possible, or sanitize input carefully.
+    pattern-either:
+      - pattern: |
+          eval($USER_INPUT)
+      - pattern: |
+          instance_eval($USER_INPUT)
+      - pattern: |
+          class_eval($USER_INPUT)
+      - pattern: |
+          module_eval($USER_INPUT)
+    metadata:
+      category: security
+      technology: [ruby]
+      cwe: "CWE-94: Improper Control of Generation of Code"
+
+  - id: ruby-freeze-string-literal
+    languages: [ruby]
+    severity: INFO
+    message: |
+      String literal should be frozen for immutability and performance.
+      Add `# frozen_string_literal: true` at the top of file,
+      or use .freeze on the string.
+    pattern-either:
+      - pattern: |
+          $CONST = "..."
+    metadata:
+      category: performance
+      technology: [ruby]
+
+  - id: ruby-file-not-closed
+    languages: [ruby]
+    severity: WARNING
+    message: |
+      File opened without block form may not be properly closed.
+      Use block form `File.open(...) do |f| ... end` to ensure file is closed.
+    patterns:
+      - pattern: |
+          $FILE = File.open(...)
+      - pattern-not-inside: |
+          File.open(...) do |$F|
+            ...
+          end
+    metadata:
+      category: correctness
+      technology: [ruby]
+
+  - id: ruby-nil-check-after-use
+    languages: [ruby]
+    severity: WARNING
+    message: |
+      Variable used before nil check.
+      This may cause NoMethodError if variable is nil.
+      Move the nil check before using the variable.
+    pattern: |
+      $VAR.$METHOD
+      ...
+      if $VAR.nil?
+        ...
+      end
+    metadata:
+      category: correctness
+      technology: [ruby]
+
+  - id: ruby-puts-in-production
+    languages: [ruby]
+    severity: INFO
+    message: |
+      Using puts/print for output. Consider using a proper logger
+      for production code to control log levels and formatting.
+    pattern-either:
+      - pattern: puts(...)
+      - pattern: print(...)
+      - pattern: p(...)
+    metadata:
+      category: style
+      technology: [ruby]
+
+  # Ruby: Method call on potentially nil object without safe navigation
+  - id: ruby-method-on-nil-without-safe-nav
+    languages: [ruby]
+    severity: WARNING
+    message: |
+      Calling method on potentially nil object without nil check.
+
+      Pattern detected: `$OBJ.$ATTR.$METHOD!(...)` where $ATTR may be nil.
+
+      If `$ATTR` is nil, calling `$METHOD!` will raise NoMethodError.
+
+      Fix options:
+      1. Use safe navigation operator: `$OBJ.$ATTR&.$METHOD!(...)`
+      2. Add presence check: `return unless $OBJ.$ATTR.present?`
+      3. Add nil guard: `$OBJ.$ATTR&.$METHOD!(...) if $OBJ.$ATTR`
+
+      Example:
+      ```ruby
+      # Bad - raises NoMethodError if host is nil
+      self.host.sub!(/^https?:\/\//, '')
+
+      # Good - safe navigation
+      self.host&.sub!(/^https?:\/\//, '')
+
+      # Good - explicit check
+      return unless self.host.present?
+      self.host.sub!(/^https?:\/\//, '')
+      ```
+    patterns:
+      - pattern-either:
+          - pattern: self.$ATTR.sub!(...)
+          - pattern: self.$ATTR.gsub!(...)
+          - pattern: self.$ATTR.replace!(...)
+          - pattern: self.$ATTR.strip!
+          - pattern: self.$ATTR.chomp!
+          - pattern: self.$ATTR.chop!
+          - pattern: self.$ATTR.downcase!
+          - pattern: self.$ATTR.upcase!
+          - pattern: self.$ATTR.capitalize!
+          - pattern: self.$ATTR.delete!(...)
+          - pattern: self.$ATTR.slice!(...)
+      - pattern-not-inside: |
+          if self.$ATTR.present?
+            ...
+          end
+      - pattern-not-inside: |
+          return unless self.$ATTR.present?
+          ...
+      - pattern-not-inside: |
+          return if self.$ATTR.nil?
+          ...
+    metadata:
+      category: correctness
+      technology: [ruby]
+
+  # Ruby: Bang method on potentially nil - general pattern
+  - id: ruby-bang-method-on-potentially-nil
+    languages: [ruby]
+    severity: WARNING
+    message: |
+      Calling bang method (!) on object that may be nil.
+
+      Bang methods like `sub!`, `gsub!`, `strip!` will raise NoMethodError if
+      called on nil. Use safe navigation operator `&.` or check for nil first.
+
+      Example fix:
+      ```ruby
+      # Instead of:
+      value.strip!
+
+      # Use:
+      value&.strip!
+      # or
+      value.strip! if value
+      ```
+    patterns:
+      - pattern-either:
+          - pattern: $VAR.sub!(...)
+          - pattern: $VAR.gsub!(...)
+          - pattern: $VAR.strip!
+          - pattern: $VAR.chomp!
+          - pattern: $VAR.downcase!
+          - pattern: $VAR.upcase!
+      - metavariable-regex:
+          metavariable: $VAR
+          # Match variables that commonly might be nil
+          regex: '^(host|url|path|name|title|value|text|content|body|data|param|input|result|response)$'
+    metadata:
+      category: correctness
+      technology: [ruby]
+
+  # Ruby: SQL injection via string interpolation in execute
+  - id: ruby-sql-injection-execute
+    languages: [ruby]
+    severity: ERROR
+    message: |
+      SECURITY: SQL injection vulnerability - string interpolation in SQL query.
+
+      Using `#{variable}` directly in SQL string allows attackers to inject
+      malicious SQL code. This is a critical security vulnerability.
+
+      Vulnerable pattern:
+      ```ruby
+      execute "INSERT INTO table VALUES ('#{user_input}')"
+      ```
+
+      Fix: Use parameterized queries with placeholders:
+      ```ruby
+      execute "INSERT INTO table VALUES (?)", user_input
+      # or
+      execute "INSERT INTO table VALUES ($1)", [user_input]
+      ```
+
+      For ActiveRecord:
+      ```ruby
+      Model.where("column = ?", user_input)
+      # or
+      Model.where(column: user_input)
+      ```
+    pattern-regex: '(execute|exec_query|select_all|select_one|select_value|select_values)\s*[\(\s]["''].*#\{.*\}.*["'']'
+    metadata:
+      category: security
+      technology: [ruby, rails]
+      cwe: "CWE-89: SQL Injection"
+      owasp: "A03:2021 - Injection"
+
+  # Ruby: SQL injection in ActiveRecord raw SQL
+  - id: ruby-activerecord-sql-injection
+    languages: [ruby]
+    severity: ERROR
+    message: |
+      SECURITY: SQL injection vulnerability in ActiveRecord query.
+
+      Using string interpolation `#{...}` in ActiveRecord's `where`, `find_by_sql`,
+      or similar methods allows SQL injection attacks.
+
+      Vulnerable:
+      ```ruby
+      User.where("name = '#{params[:name]}'")
+      User.find_by_sql("SELECT * FROM users WHERE id = #{id}")
+      ```
+
+      Safe alternatives:
+      ```ruby
+      User.where("name = ?", params[:name])
+      User.where(name: params[:name])
+      User.find_by_sql(["SELECT * FROM users WHERE id = ?", id])
+      ```
+    pattern-regex: '\.(where|find_by_sql|select|joins|group|having|order|pluck)\s*\(\s*["''].*#\{.*\}.*["'']'
+    metadata:
+      category: security
+      technology: [ruby, rails]
+      cwe: "CWE-89: SQL Injection"
+
+  # Ruby: SQL injection in connection.execute
+  - id: ruby-connection-execute-sql-injection
+    languages: [ruby]
+    severity: ERROR
+    message: |
+      SECURITY: SQL injection via connection.execute with string interpolation.
+
+      Raw SQL execution with interpolated variables is vulnerable to SQL injection.
+
+      Fix: Use parameterized queries:
+      ```ruby
+      # Instead of:
+      connection.execute("UPDATE users SET name = '#{name}' WHERE id = #{id}")
+
+      # Use:
+      connection.exec_query("UPDATE users SET name = $1 WHERE id = $2", 'SQL', [[nil, name], [nil, id]])
+      # Or use ActiveRecord methods when possible
+      ```
+    pattern-regex: '(connection|ActiveRecord::Base\.connection)\.execute\s*\(\s*["''].*#\{.*\}.*["'']'
+    metadata:
+      category: security
+      technology: [ruby, rails]
+      cwe: "CWE-89: SQL Injection"
+
+  # Ruby: Unsafe use of send/public_send with user input
+  - id: ruby-unsafe-send
+    languages: [ruby]
+    severity: ERROR
+    message: |
+      SECURITY: Using send/public_send with potentially user-controlled method name.
+
+      If the method name comes from user input, attackers can call arbitrary methods,
+      potentially leading to code execution or data leakage.
+
+      Vulnerable:
+      ```ruby
+      object.send(params[:method])
+      object.public_send(user_input)
+      ```
+
+      Fix: Whitelist allowed methods:
+      ```ruby
+      ALLOWED_METHODS = %w[name email created_at].freeze
+      if ALLOWED_METHODS.include?(method_name)
+        object.send(method_name)
+      end
+      ```
+    pattern-either:
+      - pattern: $OBJ.send(params[$KEY])
+      - pattern: $OBJ.send(params[$KEY], ...)
+      - pattern: $OBJ.public_send(params[$KEY])
+      - pattern: $OBJ.public_send(params[$KEY], ...)
+      - pattern: $OBJ.__send__(params[$KEY])
+    metadata:
+      category: security
+      technology: [ruby]
+      cwe: "CWE-470: Use of Externally-Controlled Input to Select Classes or Code"
+
+  # Ruby: Mass assignment vulnerability
+  - id: ruby-mass-assignment
+    languages: [ruby]
+    severity: WARNING
+    message: |
+      Potential mass assignment vulnerability.
+
+      Using `update(params)` or `create(params)` with unsanitized params
+      may allow attackers to modify protected attributes.
+
+      Fix: Use strong parameters in Rails:
+      ```ruby
+      def user_params
+        params.require(:user).permit(:name, :email)
+      end
+
+      User.create(user_params)
+      ```
+    pattern-either:
+      - pattern: $MODEL.new(params)
+      - pattern: $MODEL.create(params)
+      - pattern: $MODEL.create!(params)
+      - pattern: $MODEL.update(params)
+      - pattern: $MODEL.update!(params)
+      - pattern: $MODEL.update_attributes(params)
+      - pattern: $MODEL.update_attributes!(params)
+      - pattern: $MODEL.assign_attributes(params)
+    metadata:
+      category: security
+      technology: [ruby, rails]
+      cwe: "CWE-915: Improperly Controlled Modification of Dynamically-Determined Object Attributes"
+
+  # Ruby: Command injection via system/exec/backticks
+  - id: ruby-command-injection
+    languages: [ruby]
+    severity: ERROR
+    message: |
+      SECURITY: Potential command injection vulnerability.
+
+      Using string interpolation in shell commands allows attackers to
+      inject malicious commands.
+
+      Vulnerable:
+      ```ruby
+      system("ls #{user_input}")
+      `echo #{params[:msg]}`
+      exec("cat #{filename}")
+      ```
+
+      Fix: Use array form or proper escaping:
+      ```ruby
+      system("ls", user_input)  # Array form - safe
+      system("ls", Shellwords.escape(user_input))
+      ```
+    pattern-regex: '(system|exec|spawn|IO\.popen|Open3\.capture3|Open3\.popen3|Kernel\.system|Kernel\.exec)\s*\(\s*["''].*#\{.*\}.*["'']'
+    metadata:
+      category: security
+      technology: [ruby]
+      cwe: "CWE-78: OS Command Injection"
+
+  # Ruby: Unsafe YAML load
+  - id: ruby-unsafe-yaml-load
+    languages: [ruby]
+    severity: ERROR
+    message: |
+      SECURITY: Unsafe YAML.load can execute arbitrary code.
+
+      `YAML.load` deserializes arbitrary Ruby objects, which can lead to
+      remote code execution if loading untrusted data.
+
+      Fix: Use `YAML.safe_load` instead:
+      ```ruby
+      # Unsafe
+      YAML.load(user_input)
+
+      # Safe
+      YAML.safe_load(user_input)
+      YAML.safe_load(user_input, permitted_classes: [Symbol, Date])
+      ```
+    pattern-either:
+      - pattern: YAML.load($INPUT)
+      - pattern: YAML.load($INPUT, ...)
+      - pattern: YAML.unsafe_load($INPUT)
+    metadata:
+      category: security
+      technology: [ruby]
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+
+  # Ruby: Unsafe Marshal.load
+  - id: ruby-unsafe-marshal-load
+    languages: [ruby]
+    severity: ERROR
+    message: |
+      SECURITY: Marshal.load can execute arbitrary code.
+
+      Deserializing data with Marshal.load from untrusted sources can
+      lead to remote code execution.
+
+      Avoid Marshal.load with user input. Use JSON or other safe formats.
+    pattern-either:
+      - pattern: Marshal.load($INPUT)
+      - pattern: Marshal.restore($INPUT)
+    metadata:
+      category: security
+      technology: [ruby]
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+
+  # Ruby: Open redirect vulnerability
+  - id: ruby-open-redirect
+    languages: [ruby]
+    severity: WARNING
+    message: |
+      Potential open redirect vulnerability.
+
+      Redirecting to a URL from user input without validation can be used
+      for phishing attacks.
+
+      Fix: Validate the redirect URL:
+      ```ruby
+      # Check if URL is relative or whitelisted
+      if url.start_with?('/') || ALLOWED_HOSTS.include?(URI.parse(url).host)
+        redirect_to url
+      end
+      ```
+    pattern-either:
+      - pattern: redirect_to params[$KEY]
+      - pattern: redirect_to(params[$KEY])
+      - pattern: redirect_to $URL if ...
+    metadata:
+      category: security
+      technology: [ruby, rails]
+      cwe: "CWE-601: URL Redirection to Untrusted Site"
+
+  # Ruby: Hardcoded credentials
+  - id: ruby-hardcoded-credentials
+    languages: [ruby]
+    severity: ERROR
+    message: |
+      SECURITY: Hardcoded credentials detected.
+
+      Hardcoded passwords, API keys, or secrets in source code can be
+      exposed through version control or decompilation.
+
+      Fix: Use environment variables or secure credential storage:
+      ```ruby
+      # Instead of:
+      password = "secret123"
+
+      # Use:
+      password = ENV['DATABASE_PASSWORD']
+      password = Rails.application.credentials.database_password
+      ```
+    pattern-either:
+      - pattern: password = "..."
+      - pattern: api_key = "..."
+      - pattern: secret = "..."
+      - pattern: secret_key = "..."
+      - pattern: auth_token = "..."
+      - pattern: access_token = "..."
+    metadata:
+      category: security
+      technology: [ruby]
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+
+  # Ruby: Using == instead of === for type check in case
+  - id: ruby-case-type-check
+    languages: [ruby]
+    severity: INFO
+    message: |
+      Using explicit type check in case statement.
+
+      In Ruby case statements, the === operator is used automatically,
+      which works correctly for class comparisons.
+
+      This pattern is fine, but ensure you understand the difference:
+      - `===` for case/when (class matching works)
+      - `==` for equality (class matching doesn't work)
+    pattern: |
+      case $VAR
+      when $TYPE
+        ...
+      end
+    metadata:
+      category: style
+      technology: [ruby]
+
+  # Ruby: Using deprecated methods
+  - id: ruby-deprecated-methods
+    languages: [ruby]
+    severity: WARNING
+    message: |
+      Using deprecated Ruby/Rails method.
+
+      This method is deprecated and may be removed in future versions.
+
+      Common replacements:
+      - `update_attributes` -> `update`
+      - `before_filter` -> `before_action`
+      - `after_filter` -> `after_action`
+      - `find_all_by_*` -> `where(...)`
+      - `find_by_*` -> `find_by(...)`
+    pattern-either:
+      - pattern: $OBJ.update_attributes(...)
+      - pattern: $OBJ.update_attributes!(...)
+      - pattern: before_filter(...)
+      - pattern: after_filter(...)
+      - pattern: around_filter(...)
+      - pattern: skip_filter(...)
+    metadata:
+      category: correctness
+      technology: [ruby, rails]
+
+  # Ruby: N+1 query potential
+  - id: ruby-n-plus-one-potential
+    languages: [ruby]
+    severity: INFO
+    message: |
+      Potential N+1 query issue.
+
+      Iterating over a collection and accessing an association inside
+      the loop can cause N+1 queries.
+
+      Fix: Use `includes` or `preload` to eager load associations:
+      ```ruby
+      # Instead of:
+      users.each { |u| puts u.posts.count }
+
+      # Use:
+      users.includes(:posts).each { |u| puts u.posts.count }
+      ```
+    patterns:
+      - pattern-inside: |
+          $COLLECTION.each do |$ITEM|
+            ...
+          end
+      - pattern: $ITEM.$ASSOCIATION.$METHOD
+    metadata:
+      category: performance
+      technology: [ruby, rails]
+
+  # Ruby: Unsafe regex (ReDoS potential)
+  - id: ruby-regex-dos
+    languages: [ruby]
+    severity: WARNING
+    message: |
+      Regex pattern may be vulnerable to ReDoS (Regular Expression Denial of Service).
+
+      Patterns with nested quantifiers like `(a+)+`, `(a*)*`, `(a|a)*` can cause
+      exponential backtracking with malicious input.
+
+      Review the regex pattern for nested quantifiers and consider:
+      1. Using atomic groups or possessive quantifiers
+      2. Limiting input length before matching
+      3. Using timeout for regex operations
+    pattern-regex: '/\([^)]*[+*][^)]*\)[+*]/'
+    metadata:
+      category: security
+      technology: [ruby]
+      cwe: "CWE-1333: Inefficient Regular Expression Complexity"
+
+  # Ruby: Using constantize with user input
+  - id: ruby-unsafe-constantize
+    languages: [ruby]
+    severity: ERROR
+    message: |
+      SECURITY: Using constantize with user-controlled input.
+
+      `constantize` converts a string to a constant (class), which can lead
+      to arbitrary class instantiation if the input comes from users.
+
+      Fix: Whitelist allowed class names:
+      ```ruby
+      ALLOWED_TYPES = %w[Post Comment User].freeze
+      if ALLOWED_TYPES.include?(type_name)
+        type_name.constantize
+      end
+      ```
+    pattern-either:
+      - pattern: params[$KEY].constantize
+      - pattern: params[$KEY].safe_constantize
+      - pattern: $VAR.constantize
+    metadata:
+      category: security
+      technology: [ruby, rails]
+      cwe: "CWE-470: Use of Externally-Controlled Input to Select Classes or Code"
+
+  # Ruby: Dangerous method called without safe navigation in chain
+  - id: ruby-chain-without-safe-nav
+    languages: [ruby]
+    severity: WARNING
+    message: |
+      Method chain may fail if any intermediate value is nil.
+
+      Long method chains without safe navigation can raise NoMethodError
+      if any intermediate result is nil.
+
+      Fix: Use safe navigation operator `&.` throughout the chain:
+      ```ruby
+      # Instead of:
+      user.profile.settings.theme
+
+      # Use:
+      user&.profile&.settings&.theme
+      # or
+      user.profile&.settings&.theme
+      ```
+    pattern-either:
+      - pattern: $OBJ.$M1.$M2.$M3
+      - pattern: $OBJ.$M1.$M2.$M3.$M4
+    metadata:
+      category: correctness
+      technology: [ruby]
+
+  # ============ Concurrency and Threading Patterns ============
+
+  # Python: race condition with check-then-act
+  - id: python-file-race-condition
+    languages: [python]
+    severity: WARNING
+    message: |
+      Checking file existence before operation is a race condition (TOCTOU).
+      The file state can change between the check and the operation.
+      Use try/except or atomic operations instead.
+    pattern-either:
+      - pattern: |
+          if os.path.exists($PATH):
+              ...
+              open($PATH, ...)
+      - pattern: |
+          if not os.path.exists($PATH):
+              ...
+              open($PATH, ...)
+    metadata:
+      category: security
+      technology: [python]
+      cwe: "CWE-367: Time-of-check Time-of-use (TOCTOU) Race Condition"
+
+  # Python: missing lock release
+  - id: python-lock-not-released
+    languages: [python]
+    severity: WARNING
+    message: |
+      Lock acquired without using context manager.
+      If an exception occurs, the lock may not be released, causing deadlocks.
+      Use `with lock:` instead of `lock.acquire()`.
+    patterns:
+      - pattern: |
+          $LOCK.acquire(...)
+          ...
+      - pattern-not: |
+          $LOCK.acquire(...)
+          ...
+          $LOCK.release(...)
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # Java: double-checked locking without volatile
+  - id: java-double-checked-locking
+    languages: [java]
+    severity: WARNING
+    message: |
+      Double-checked locking pattern detected.
+      Without volatile keyword, this pattern is broken in Java due to memory model.
+      Make the field volatile or use a different pattern.
+    pattern: |
+      if ($FIELD == null) {
+        synchronized (...) {
+          if ($FIELD == null) {
+            $FIELD = ...;
+          }
+        }
+      }
+    metadata:
+      category: correctness
+      technology: [java]
+
+  # Go: WaitGroup Add inside goroutine
+  - id: go-waitgroup-add-in-goroutine
+    languages: [go]
+    severity: ERROR
+    message: |
+      WaitGroup.Add() called inside goroutine.
+      This can cause race conditions where Wait() returns before goroutine starts.
+      Call Add() before starting the goroutine.
+    pattern: |
+      go func(...) {
+        ...
+        $WG.Add(...)
+        ...
+      }(...)
+    metadata:
+      category: correctness
+      technology: [go]
+
+  # ============ Resource Management Patterns ============
+
+  # Python: file not closed in finally
+  - id: python-file-not-closed-exception
+    languages: [python]
+    severity: WARNING
+    message: |
+      File opened without using context manager.
+      If an exception occurs, the file may not be closed.
+      Use `with open(...) as f:` instead.
+    patterns:
+      - pattern: |
+          $FILE = open(...)
+          ...
+      - pattern-not-inside: |
+          with open(...) as $F:
+            ...
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # Java: connection not closed
+  - id: java-connection-not-closed
+    languages: [java]
+    severity: WARNING
+    message: |
+      Database connection opened without try-with-resources.
+      If an exception occurs, the connection may leak.
+      Use try-with-resources: `try (Connection conn = ...) { ... }`
+    patterns:
+      - pattern: |
+          $CONN = $DS.getConnection(...)
+      - pattern-not-inside: |
+          try ($CONN = $DS.getConnection(...)) { ... }
+    metadata:
+      category: correctness
+      technology: [java]
+
+  # ============ Error Handling Patterns ============
+
+  # Python: bare except
+  - id: python-bare-except
+    languages: [python]
+    severity: WARNING
+    message: |
+      Bare except catches all exceptions including KeyboardInterrupt and SystemExit.
+      Use `except Exception:` to catch only regular exceptions,
+      or be specific about which exceptions to catch.
+    pattern: |
+      except:
+        ...
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # Python: exception variable shadowing
+  - id: python-except-shadow
+    languages: [python]
+    severity: INFO
+    message: |
+      Exception variable 'e' may shadow outer variable.
+      In Python 3, exception variables are deleted after the except block.
+      Consider using a different name or storing the exception if needed later.
+    pattern: |
+      $VAR = ...
+      ...
+      try:
+        ...
+      except ... as $VAR:
+        ...
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # TypeScript: catch without error type check
+  - id: ts-catch-unknown-error
+    languages: [typescript]
+    severity: INFO
+    message: |
+      Catch block accesses error properties without type checking.
+      In TypeScript, caught errors are `unknown` type.
+      Use type guards: `if (error instanceof Error)` before accessing properties.
+    patterns:
+      - pattern: |
+          catch ($ERR) {
+            ...
+            $ERR.message
+            ...
+          }
+      - pattern-not: |
+          catch ($ERR) {
+            ...
+            if ($ERR instanceof ...) { ... }
+            ...
+          }
+    metadata:
+      category: correctness
+      technology: [typescript]
+
+  # ============ Operation Order / Pipeline Issues ============
+
+  # TypeScript/JavaScript: Filter before transform that could change filter condition
+  - id: ts-filter-before-transform
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: |
+      Filter operation occurs before a transform that could change the filtered property.
+
+      Pattern detected: `.filter(...).map(transform)` or `.filter(...).filter(...).map(transform)`
+
+      If the transform (like `applyTemplateVariables`, `resolve`, `interpolate`, `format`, `parse`)
+      modifies values that the filter checks, the order may be wrong.
+
+      Example bug:
+      ```
+      items.filter(x => x.value)           // Filters BEFORE transform
+           .map(x => applyVariables(x))    // Transform could make empty values non-empty
+      ```
+
+      This can cause items to be incorrectly filtered out before transformation
+      makes them valid.
+
+      Consider: Apply transformation first, then filter on the transformed result.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $ARR.filter($F1).map(($X) => $OBJ.$TRANSFORM($X, ...))
+          - pattern: |
+              $ARR.filter($F1).filter($F2).map(($X) => $OBJ.$TRANSFORM($X, ...))
+          - pattern: |
+              $ARR.filter($F1).map($X => $OBJ.$TRANSFORM($X, ...))
+          - pattern: |
+              $ARR.filter($F1).filter($F2).map($X => $OBJ.$TRANSFORM($X, ...))
+      - metavariable-regex:
+          metavariable: $TRANSFORM
+          regex: '(?i)apply.*variable|interpolate|resolve|substitute|replace.*var|expand|format|parse|process|render|compile|evaluate'
+    metadata:
+      category: correctness
+      technology: [typescript, javascript]
+
+  # TypeScript/JavaScript: Filter on property that will be modified by subsequent map
+  - id: ts-filter-property-then-transform
+    languages: [typescript, javascript]
+    severity: INFO
+    message: |
+      Filtering on a property before a transformation that likely modifies that property.
+
+      Common issue: Filter checks `item.expr` or `item.value`, then map applies variable
+      substitution or parsing that could change these properties.
+
+      If the property being filtered contains template variables, placeholders, or
+      unresolved references, it may be falsy/invalid before transformation but
+      valid after transformation.
+
+      Review whether the filter should occur after the transformation instead.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $ARR.filter(($Q) => $Q.$PROP).map(...)
+          - pattern: |
+              $ARR.filter($Q => $Q.$PROP).map(...)
+      - metavariable-regex:
+          metavariable: $PROP
+          regex: '^(expr|expression|query|value|template|text|content|body|sql|code|script|formula|pattern)$'
+    metadata:
+      category: correctness
+      technology: [typescript, javascript]
+
+  # Generic: Chained operations where filter precedes transformation
+  - id: ts-pipeline-filter-before-transform-generic
+    languages: [typescript, javascript]
+    severity: INFO
+    message: |
+      Pipeline has filter before map transformation.
+
+      If the map function transforms data in a way that could make previously-invalid
+      items valid (e.g., template variable substitution, default value application,
+      data enrichment), the filter may be incorrectly excluding items.
+
+      Consider whether the operation order is correct for your use case.
+    pattern-either:
+      - pattern: |
+          $X.filter(...).filter(($I) => $I.$PROP).map(($I) => $FN.$METHOD($I, ...))
+      - pattern: |
+          $X.filter(...).filter($I => $I.$PROP).map($I => $FN.$METHOD($I, ...))
+    metadata:
+      category: correctness
+      technology: [typescript, javascript]
+
+  # Python: Filter before map that transforms filtered values
+  - id: python-filter-before-transform
+    languages: [python]
+    severity: INFO
+    message: |
+      Filter operation occurs before a transformation that could affect filtered values.
+
+      If using filter() before map() and the map function transforms values in a way
+      that could make previously-invalid values valid, the order may be wrong.
+
+      Example: Filtering out empty strings before template substitution could
+      incorrectly exclude items that would become valid after substitution.
+    pattern-either:
+      - pattern: |
+          map($TRANSFORM, filter($FILTER, $ITEMS))
+      - pattern: |
+          [... for $X in $ITEMS if $COND]
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # ============ Undefined/Potentially Undefined Access ============
+
+  # TypeScript/JavaScript: Accessing potentially undefined property in chained call
+  - id: ts-chained-access-undefined-property
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: |
+      Accessing '$PROP' which may be undefined in this context.
+
+      In a chained method call, if '$PROP' comes from an outer scope or
+      earlier destructuring, it may be undefined when this code executes.
+
+      Consider adding a null check or using optional chaining.
+    patterns:
+      - pattern: $OBJ.$METHOD($ARG1, $ARG2, $REQ.$PROP)
+      - metavariable-regex:
+          metavariable: $PROP
+          regex: '^(filters|options|config|settings|params|context|metadata|extras|vars|variables)$'
+    metadata:
+      category: correctness
+      technology: [typescript, javascript]
+
+  # TypeScript/JavaScript: Using request property that may not exist
+  - id: ts-request-optional-property-access
+    languages: [typescript, javascript]
+    severity: INFO
+    message: |
+      Accessing '$PROP' on request object without checking if it exists.
+
+      Request objects often have optional properties. If '$PROP' is optional,
+      passing it directly to a function may cause runtime errors or unexpected behavior.
+
+      Consider: `request.$PROP ?? defaultValue` or check if property exists first.
+    patterns:
+      - pattern-either:
+          - pattern: $FN($ARGS, $REQ.$PROP)
+          - pattern: $OBJ.$METHOD($ARGS, $REQ.$PROP)
+      - metavariable-regex:
+          metavariable: $PROP
+          regex: '^(filters|options|headers|query|body|params|context|metadata|scopedVars|variables|extras)$'
+      - metavariable-regex:
+          metavariable: $REQ
+          regex: '^(request|req|options|config|props|params)$'
+    metadata:
+      category: correctness
+      technology: [typescript, javascript]
+
+  # ============ Common Logic Errors ============
+
+  # JavaScript/TypeScript: assignment in condition (potential typo)
+  - id: js-assignment-in-condition
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: |
+      Assignment in conditional expression.
+      This may be intentional, but often indicates a typo (= instead of ==).
+      If intentional, consider extracting to a separate statement for clarity.
+    pattern-either:
+      - pattern: |
+          if ($X = $Y) { ... }
+      - pattern: |
+          while ($X = $Y) { ... }
+    metadata:
+      category: correctness
+      technology: [javascript, typescript]
+
+  # Go: assignment in condition
+  - id: go-assignment-in-condition
+    languages: [go]
+    severity: INFO
+    message: |
+      Assignment in conditional expression.
+      In Go, this is often intentional (e.g., `if err := foo(); err != nil`).
+      Just ensure this is the intended behavior.
+    pattern: |
+      if $X := $Y; ... { ... }
+    metadata:
+      category: correctness
+      technology: [go]
+
+  # Python: mutable argument modification
+  - id: python-modify-mutable-arg
+    languages: [python]
+    severity: INFO
+    message: |
+      Modifying mutable argument in place.
+      This modifies the caller's data, which may be unexpected.
+      Consider making a copy if modification should be local.
+    patterns:
+      - pattern-inside: |
+          def $FUNC(..., $ARG: list, ...):
+            ...
+      - pattern-either:
+          - pattern: $ARG.append(...)
+          - pattern: $ARG.extend(...)
+          - pattern: $ARG.clear()
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # ============ API Misuse Detection ============
+
+  # Python: json.loads on file object
+  - id: python-json-loads-file
+    languages: [python]
+    severity: ERROR
+    message: |
+      json.loads() called on file object.
+      json.loads() expects a string, not a file object.
+      Use json.load(file) instead of json.loads(file).
+    pattern-either:
+      - pattern: json.loads($FILE.read())
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # Python: re.match vs re.search confusion
+  - id: python-re-match-vs-search
+    languages: [python]
+    severity: INFO
+    message: |
+      re.match() only matches at the beginning of the string.
+      If you want to find pattern anywhere in string, use re.search().
+      re.match(pattern, string) is equivalent to re.search('^' + pattern, string).
+    pattern: re.match($PATTERN, $STRING)
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # JavaScript: parseInt without radix
+  - id: js-parseint-without-radix
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: |
+      parseInt() called without radix parameter.
+      Without radix, parseInt may interpret strings with leading zeros as octal.
+      Always specify radix: parseInt(str, 10) for decimal.
+    pattern: parseInt($VAR)
+    metadata:
+      category: correctness
+      technology: [javascript, typescript]
+
+  # JavaScript: Array.isArray vs instanceof Array
+  - id: js-instanceof-array
+    languages: [javascript, typescript]
+    severity: INFO
+    message: |
+      Using instanceof Array for array check.
+      This fails across different JavaScript realms (iframes, workers).
+      Use Array.isArray() for reliable array checking.
+    pattern: $X instanceof Array
+    metadata:
+      category: correctness
+      technology: [javascript, typescript]
+
+  # ============ Cache and State Management Patterns ============
+
+  # Go: Cache set with false value (often indicates semantic mismatch)
+  - id: go-cache-set-false-value
+    languages: [go]
+    severity: WARNING
+    message: |
+      Setting cache value to false/denied state.
+      Many caches use "key exists = granted, key absent = denied" semantics.
+      Storing explicit false values may be ignored or cause unexpected behavior.
+      Verify this matches your cache's design - consider using a denial cache instead.
+    pattern-either:
+      - pattern: $CACHE.Set($CTX, $KEY, false)
+      - pattern: $CACHE.Set($KEY, false)
+    metadata:
+      category: correctness
+      technology: [go]
+
+  # Go: Asymmetric cache trust - only checking positive case
+  - id: go-cache-asymmetric-trust
+    languages: [go]
+    severity: WARNING
+    message: |
+      Cache lookup only handles positive (allowed/found) case.
+      If cache stores both grants and denials, both should be trusted equally.
+      Ignoring cached denials can cause security issues (stale grants bypass revocation).
+      Consider: check cache hit regardless of value, or use separate grant/denial caches.
+    patterns:
+      - pattern: |
+          if $ALLOWED {
+            ...
+            return ...
+          }
+      - pattern-inside: |
+          $VAL, $ERR := $CACHE.$METHOD(...)
+          ...
+    metadata:
+      category: security
+      technology: [go]
+
+  # Go: Permission check returns early on allowed but continues on denied
+  - id: go-permission-early-return-allowed-only
+    languages: [go]
+    severity: INFO
+    message: |
+      Permission check returns early when allowed but falls through when denied.
+      This asymmetry may indicate:
+      1. Intentional: denial requires additional checks
+      2. Bug: denied case should also return early
+      Verify this is the intended behavior for security-critical code.
+    pattern: |
+      if $ALLOWED {
+        ...
+        return $RESPONSE{Allowed: $ALLOWED}, nil
+      }
+    metadata:
+      category: security
+      technology: [go]
+
+  # Go: Permission/Authorization asymmetric trust - allowed returns early, denied falls through
+  - id: go-permission-asymmetric-return
+    languages: [go]
+    severity: WARNING
+    message: |
+      SECURITY: Permission check exhibits asymmetric trust behavior.
+      When '$ALLOWED' is true, the function returns immediately trusting the cached/checked result.
+      When '$ALLOWED' is false, execution continues (likely to re-check against database).
+
+      This asymmetry can cause security vulnerabilities:
+      - Cached denials are ignored, wasting resources on repeated DB lookups
+      - More critically: if cache stores denials but code ignores them, revoked permissions
+        may be re-granted from stale positive entries elsewhere
+
+      Fix options:
+      1. Trust both cached grants AND denials equally (return early for both)
+      2. Use separate caches for grants and denials with appropriate TTLs
+      3. If intentional (deny requires fresh check), document this clearly
+    pattern-either:
+      - pattern: |
+          $ALLOWED, $ERR := $FUNC(...)
+          ...
+          if $ALLOWED {
+            ...
+            return ...
+          }
+      - pattern: |
+          $ALLOWED, $ERR = $FUNC(...)
+          ...
+          if $ALLOWED {
+            ...
+            return ...
+          }
+    metadata:
+      category: security
+      technology: [go]
+      cwe: "CWE-613: Insufficient Session Expiration"
+
+  # Go: checkPermission result only used for positive case
+  - id: go-check-permission-asymmetric
+    languages: [go]
+    severity: WARNING
+    message: |
+      SECURITY: Permission check result only triggers early return when allowed=true.
+
+      Pattern detected:
+      ```
+      allowed, err := s.checkPermission(ctx, cachedPerms, req)
+      if allowed {
+          return &Response{Allowed: allowed}, nil  // Trust positive
+      }
+      // Negative falls through - ignores cached denial
+      ```
+
+      This is problematic because:
+      1. Cached denials are not trusted, leading to unnecessary DB queries
+      2. If the cache correctly stored a denial, ignoring it could allow stale grants
+      3. Metrics will incorrectly show cache misses for denied permissions
+
+      Recommended fix:
+      ```
+      allowed, err := s.checkPermission(ctx, cachedPerms, req)
+      if err == nil {  // Cache hit
+          return &Response{Allowed: allowed}, nil  // Trust both positive AND negative
+      }
+      // Only fall through on cache miss (err != nil)
+      ```
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $ALLOWED, $ERR := $S.checkPermission($ARGS)
+              ...
+              if $ALLOWED {
+                ...
+                return ...
+              }
+          - pattern: |
+              $ALLOWED, $ERR := $S.$CHECK($CTX, $CACHED, $REQ)
+              ...
+              if $ALLOWED {
+                ...
+                return ...
+              }
+      - metavariable-regex:
+          metavariable: $CHECK
+          regex: '(?i)check.*permission|verify.*access|validate.*auth'
+    metadata:
+      category: security
+      technology: [go]
+      cwe: "CWE-863: Incorrect Authorization"
+
+  # Go: Cache hit only returns on truthy value (generic pattern)
+  - id: go-cache-hit-truthy-only
+    languages: [go]
+    severity: INFO
+    message: |
+      Cache lookup returns early only when the cached value is truthy.
+      If cache stores both positive and negative results, this pattern
+      ignores cached negative results, causing:
+      1. Unnecessary backend lookups for denied/negative cases
+      2. Potential security issues if negative results should be trusted
+
+      Consider returning early for any cache hit (regardless of value),
+      or use separate caches for positive/negative results.
+    patterns:
+      - pattern: |
+          if $VAL {
+            ...
+            return ...
+          }
+      - pattern-inside: |
+          $VAL, $ERR := $OBJ.$METHOD($ARGS)
+          if $ERR == nil {
+            ...
+          }
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: '(?i)get.*cache|cached.*|check.*'
+    metadata:
+      category: security
+      technology: [go]
+
+  # Python: Cache with boolean value semantic mismatch
+  - id: python-cache-set-false
+    languages: [python]
+    severity: INFO
+    message: |
+      Setting cache value to False.
+      Some caches treat "key exists" as positive and "key missing" as negative.
+      Explicitly storing False may not work as expected.
+      Verify this matches your cache's semantics.
+    pattern-either:
+      - pattern: $CACHE.set($KEY, False, ...)
+      - pattern: $CACHE[$KEY] = False
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # TypeScript: Cache asymmetric handling
+  - id: ts-cache-asymmetric-handling
+    languages: [typescript, javascript]
+    severity: INFO
+    message: |
+      Cache value checked only for truthy case.
+      If cache stores both positive and negative results, both should be handled.
+      Ignoring cached negative results may cause unnecessary lookups or stale data issues.
+    patterns:
+      - pattern: |
+          if ($CACHED) {
+            return ...;
+          }
+      - pattern-inside: |
+          const $CACHED = $CACHE.get(...);
+          ...
+    metadata:
+      category: correctness
+      technology: [typescript, javascript]
+
+  # ============ Test Code Encapsulation Patterns ============
+
+  # Go: Test accessing internal field through service struct (common suffixes)
+  - id: go-test-accessing-internal-field
+    languages: [go]
+    severity: WARNING
+    message: |
+      Test code accesses internal field '$FIELD' through service struct.
+      This breaks encapsulation - tests should use public APIs instead of reaching into internal implementation details.
+
+      Example:
+        Bad:  anonService.anonStore.ListDevices(...)  // Accessing internal field
+        Good: anonService.ListDevices(...)            // Using public API
+
+      Consider:
+      1. Adding a public method on the service that wraps this functionality
+      2. Using dependency injection to provide a mock/test implementation
+      3. If testing internal behavior is necessary, move the test to the same package
+    patterns:
+      - pattern-either:
+          - pattern: $SERVICE.$FIELD.$METHOD(...)
+          - pattern: $SERVICE.$FIELD.$SUBFIELD.$METHOD(...)
+          - pattern: $SERVICE.$FIELD[$KEY]
+      - metavariable-regex:
+          metavariable: $FIELD
+          # Match common internal field naming patterns (lowercase in Go = unexported)
+          # Matches: anonStore, dbClient, cacheRepo, userService, etc.
+          regex: '^[a-z]+(?:Store|Cache|Client|Repo|Repository|DB|Handler|Manager|Service|Provider|Impl|Pool|Queue|Worker|Engine|Driver|Adapter|Gateway|Proxy|Wrapper|Helper|Util|Factory|Builder|Registry|Container|Context|Session|Connection|Transaction)$'
+      - pattern-inside: |
+          func $TESTFUNC($T *testing.T) {
+            ...
+          }
+    metadata:
+      category: style
+      technology: [go]
+
+  # Go: Test accessing lowercase (unexported) camelCase field - general pattern
+  - id: go-test-accessing-unexported-field
+    languages: [go]
+    severity: INFO
+    message: |
+      Test code appears to access an unexported (lowercase) field '$FIELD'.
+      In Go, lowercase fields are package-private. If this test is in a different package (_test),
+      accessing unexported fields breaks encapsulation.
+
+      Example:
+        Bad:  myService.internalField.DoSomething()
+        Good: myService.DoSomething()  // Use public method instead
+
+      Consider exposing a public API or testing through public methods.
+    patterns:
+      - pattern-either:
+          - pattern: $VAR.$FIELD.$METHOD(...)
+          - pattern: $VAR.$FIELD.$SUBFIELD
+      - metavariable-regex:
+          metavariable: $FIELD
+          # Match any lowercase camelCase field (unexported in Go)
+          # Matches: anonStore, myClient, dataCache, etc.
+          regex: '^[a-z]+[A-Z][a-zA-Z0-9]*$'
+      - pattern-inside: |
+          func $TESTFUNC($T *testing.T) {
+            ...
+          }
+    metadata:
+      category: style
+      technology: [go]
+
+  # Go: Test accessing any lowercase field followed by method call (most general)
+  - id: go-test-chained-unexported-access
+    languages: [go]
+    severity: INFO
+    message: |
+      Test code accesses field '$FIELD' and chains a method call.
+      If '$FIELD' is unexported (lowercase first letter in Go), this breaks encapsulation.
+
+      Pattern detected: $VAR.$FIELD.$METHOD(...)
+
+      This pattern often indicates:
+      1. Testing implementation details instead of public behavior
+      2. Tight coupling between test and implementation
+      3. Fragile tests that break when internals change
+
+      Consider using public APIs for testing.
+    patterns:
+      - pattern: $VAR.$FIELD.$METHOD(...)
+      - metavariable-regex:
+          metavariable: $FIELD
+          # Match any identifier starting with lowercase letter
+          regex: '^[a-z][a-zA-Z0-9]*$'
+      - metavariable-regex:
+          metavariable: $VAR
+          # Match common service/component variable names
+          regex: '^[a-z]*(?:Service|Server|Handler|Controller|Manager|Client|Impl|Instance|Component|Module)$|^[a-z]+Svc$|^svc$|^s$'
+      - pattern-inside: |
+          func $TESTFUNC($T *testing.T) {
+            ...
+          }
+    metadata:
+      category: style
+      technology: [go]
+
+  # Go: Direct field access pattern in any function (not just tests) - for broader detection
+  - id: go-unexported-field-chain-call
+    languages: [go]
+    severity: INFO
+    message: |
+      Chained method call through unexported field '$FIELD'.
+
+      Pattern: $OBJ.$FIELD.$METHOD(...)
+
+      If '$FIELD' starts with lowercase, it's unexported in Go.
+      Accessing unexported fields from external packages will cause compile errors.
+      Even within the same package, this pattern may indicate poor encapsulation.
+
+      Consider whether this field access should go through a public method instead.
+    patterns:
+      - pattern: $OBJ.$FIELD.$METHOD(...)
+      - metavariable-regex:
+          metavariable: $FIELD
+          # Common internal component patterns
+          regex: '^[a-z]+(?:Store|Cache|Client|Repo|DB|Handler|Manager|Service|Pool|Queue)$'
+    metadata:
+      category: style
+      technology: [go]
+
+  # ============ Test Code Quality Patterns ============
+
+  # Go: Test comment contradicts code
+  - id: go-test-comment-code-mismatch
+    languages: [go]
+    severity: INFO
+    message: |
+      Test code may not match its descriptive comment.
+      When setting up test fixtures, ensure the code matches the test's intent.
+      Common issues:
+      - Comment says "allow" but code sets deny
+      - Comment says "deny" but code sets allow
+      Review the test setup carefully.
+    pattern-regex: '//.*(?:allow|grant|permit).*\n.*(?:false|deny|denied)'
+    metadata:
+      category: correctness
+      technology: [go]
+
+  # Python: Test assertion with wrong expected value
+  - id: python-test-assert-wrong-bool
+    languages: [python]
+    severity: INFO
+    message: |
+      Test assertion may have incorrect expected boolean value.
+      Ensure the expected value matches the test's intent described in comments or test name.
+    pattern-either:
+      - pattern: assert $VAR == False
+      - pattern: assert $VAR is False
+      - pattern: self.assertFalse($VAR)
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # ============ Security: Authorization Patterns ============
+
+  # Go: Authorization check without denial cache lookup
+  - id: go-auth-missing-denial-check
+    languages: [go]
+    severity: WARNING
+    message: |
+      Authorization check queries permission cache but not denial cache.
+      If your system has separate caches for grants and denials, both should be checked.
+      Missing denial cache check can allow revoked permissions to remain effective.
+    patterns:
+      - pattern: $PERMS, $ERR := $S.getCachedIdentityPermissions(...)
+      - pattern-not-inside: |
+          ...
+          $DENIAL := $S.$DENIAL_CACHE.Get(...)
+          ...
+    metadata:
+      category: security
+      technology: [go]
+
+  # Go: Cache metrics inconsistency
+  - id: go-cache-metrics-inconsistent
+    languages: [go]
+    severity: INFO
+    message: |
+      Cache metrics may not accurately reflect cache behavior.
+      If cache misses are reported but cached values are ignored,
+      metrics will be misleading for debugging and monitoring.
+    patterns:
+      - pattern: |
+          $METRICS.$METHOD.WithLabelValues("false", ...)
+      - pattern-inside: |
+          if $CACHED_VAL {
+            ...
+          }
+          $METRICS.$METHOD.WithLabelValues("false", ...)
+    metadata:
+      category: correctness
+      technology: [go]
+
+  # ============ Test Comment-Code Semantic Mismatch ============
+
+  # Go: Comment says "allow/grant/permit" but next line sets false
+  - id: go-test-comment-allow-sets-false
+    languages: [go]
+    severity: ERROR
+    message: |
+      TEST BUG: Comment indicates allowing/granting access, but code sets 'false'.
+
+      The comment suggests this code should allow or grant access, but the very next
+      line sets a value to 'false'. This semantic mismatch often indicates:
+
+      1. Misunderstanding of cache semantics (e.g., permission cache stores only 'true' for granted)
+      2. Copy-paste error from another test case
+      3. Comment is outdated and doesn't match the code
+
+      Common mistake: Setting permission cache to 'false' to represent "no permission".
+      However, many caches use "key exists = granted, key absent = not granted".
+      Storing 'false' may be ignored or cause unexpected behavior.
+
+      Review: Does the code actually match the test's intent?
+    pattern-regex: '(?i)(//|/\*)[^\n]*(allow|grant|permit|give.*access|enable.*access)[^\n]*\n[^\n]*=\s*false'
+    metadata:
+      category: correctness
+      technology: [go]
+
+  # Go: Comment says "allow" but within next 2 lines sets false (multi-line gap)
+  - id: go-test-comment-allow-sets-false-multiline
+    languages: [go]
+    severity: ERROR
+    message: |
+      TEST BUG: Comment indicates allowing access, but nearby code sets 'false'.
+
+      Pattern detected: Comment mentions "allow/grant/permit" but within the next few lines,
+      a value is set to 'false'. This often indicates:
+
+      1. Misunderstanding of cache semantics
+      2. The permission cache only stores 'true' values; setting 'false' is likely wrong
+      3. Copy-paste error or outdated comment
+
+      Example from your codebase:
+      ```go
+      // Allow access to the dashboard to prove this is not checked
+      s.permCache.Set(ctx, key, map[string]bool{"resource": false})  // BUG!
+      ```
+
+      If the cache semantic is "key exists = granted", then storing 'false' does NOT
+      mean "explicitly denied" - it may be ignored entirely.
+
+      Review: Does the code actually match the test's intent?
+    pattern-regex: '(?i)(//|/\*)[^\n]*(allow|grant|permit)[^\n]*\n[^\n]*\n[^\n]*:\s*false'
+    metadata:
+      category: correctness
+      technology: [go]
+
+  # Go: Permission cache Set with map containing false value
+  - id: go-perm-cache-set-false-value
+    languages: [go]
+    severity: WARNING
+    message: |
+      Permission cache Set() called with map containing 'false' value.
+
+      Pattern: $CACHE.Set(ctx, key, map[string]bool{"resource": false})
+
+      This is likely a bug. Permission caches typically use these semantics:
+      - Key exists with 'true' value = permission granted
+      - Key does not exist = permission not granted (check database)
+
+      Setting a key to 'false' is semantically different from not having the key:
+      - The cache lookup might ignore 'false' values and treat them as "not found"
+      - Or it might incorrectly treat 'false' as "found but denied" when that's not supported
+
+      If you need to cache explicit denials:
+      1. Use a separate denial cache
+      2. Or ensure the lookup code handles both 'true' and 'false' values correctly
+
+      Review the cache implementation to understand its semantics.
+    patterns:
+      - pattern-either:
+          - pattern: '$CACHE.Set($CTX, $KEY, map[string]bool{..., $K: false, ...})'
+          - pattern: '$CACHE.Set($KEY, map[string]bool{..., $K: false, ...})'
+      - metavariable-regex:
+          metavariable: $CACHE
+          regex: '(?i).*(?:perm|permission|auth|access|grant|cache).*'
+    metadata:
+      category: correctness
+      technology: [go]
+
+  # Go: Any cache Set with explicit false in map (generic)
+  - id: go-cache-set-map-false-value
+    languages: [go]
+    severity: INFO
+    message: |
+      Cache Set() called with map containing explicit 'false' value.
+
+      Many boolean caches use "key present = true" semantics. The absence of a key
+      indicates false/negative, not an explicit 'false' value.
+
+      Storing explicit 'false' may:
+      - Be semantically different from "key not present"
+      - Be ignored by lookup code that only checks for truthy values
+      - Cause subtle bugs in permission/access control logic
+
+      Verify that the cache implementation actually handles 'false' values as intended.
+    patterns:
+      - pattern-either:
+          - pattern: '$OBJ.Set($CTX, $KEY, map[string]bool{..., $K: false, ...})'
+          - pattern: '$OBJ.Set($KEY, map[string]bool{..., $K: false, ...})'
+      - pattern-inside: |
+          func $TESTFUNC($T *testing.T) {
+            ...
+          }
+    metadata:
+      category: correctness
+      technology: [go]
+
+  # Go: Comment says "deny/block/revoke" but next line sets true
+  - id: go-test-comment-deny-sets-true
+    languages: [go]
+    severity: ERROR
+    message: |
+      TEST BUG: Comment indicates denying/blocking access, but code sets 'true'.
+
+      The comment suggests this code should deny or block access, but the very next
+      line sets a value to 'true'. This semantic mismatch indicates the test setup
+      doesn't match the test's intent.
+
+      Review: Does the code actually match the test's intent?
+    pattern-regex: '(?i)(//|/\*)[^\n]*(deny|block|revoke|reject|forbid|disable.*access)[^\n]*\n[^\n]*=\s*true'
+    metadata:
+      category: correctness
+      technology: [go]
+
+  # Generic: map[string]bool with false value in test function
+  - id: go-test-map-bool-false-value
+    languages: [go]
+    severity: INFO
+    message: |
+      Test uses map[string]bool with explicit 'false' value.
+
+      In many systems, boolean maps/caches use "key present = true" semantics.
+      The absence of a key indicates false/negative, not an explicit false value.
+
+      Storing explicit 'false' may:
+      - Be semantically different from "key not present"
+      - Be ignored by lookup code that only checks for true values
+      - Not achieve the intended test behavior
+
+      Consider whether:
+      1. The system actually distinguishes between "false" and "absent"
+      2. You should omit the key instead of setting it to false
+      3. A separate negative/denial cache should be used
+    patterns:
+      - pattern: 'map[string]bool{..., $KEY: false, ...}'
+      - pattern-inside: |
+          func $TESTFUNC($T *testing.T) {
+            ...
+          }
+    metadata:
+      category: correctness
+      technology: [go]
+
+  # Python: Comment says "allow" but sets False
+  - id: python-test-comment-allow-sets-false
+    languages: [python]
+    severity: ERROR
+    message: |
+      TEST BUG: Comment indicates allowing access, but code sets False.
+
+      The comment suggests allowing/granting access, but the code sets a value to False.
+      This semantic mismatch often indicates the test setup doesn't match the intent.
+    pattern-regex: '(?i)#[^\n]*(allow|grant|permit|give.*access)[^\n]*\n[^\n]*=\s*False'
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # Python: Comment says "deny" but sets True
+  - id: python-test-comment-deny-sets-true
+    languages: [python]
+    severity: ERROR
+    message: |
+      TEST BUG: Comment indicates denying access, but code sets True.
+
+      The comment suggests denying/blocking access, but the code sets a value to True.
+      This semantic mismatch indicates the test setup doesn't match the intent.
+    pattern-regex: '(?i)#[^\n]*(deny|block|revoke|reject|forbid)[^\n]*\n[^\n]*=\s*True'
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # TypeScript/JavaScript: Comment says "allow" but sets false
+  - id: ts-test-comment-allow-sets-false
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: |
+      TEST BUG: Comment indicates allowing access, but code sets 'false'.
+
+      The comment suggests allowing/granting access, but the code sets a value to false.
+      This semantic mismatch often indicates the test setup doesn't match the intent.
+    pattern-regex: '(?i)(//|/\*)[^\n]*(allow|grant|permit|give.*access)[^\n]*\n[^\n]*=\s*false'
+    metadata:
+      category: correctness
+      technology: [typescript, javascript]
+
+  # TypeScript/JavaScript: Comment says "deny" but sets true
+  - id: ts-test-comment-deny-sets-true
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: |
+      TEST BUG: Comment indicates denying access, but code sets 'true'.
+
+      The comment suggests denying/blocking access, but the code sets a value to true.
+      This semantic mismatch indicates the test setup doesn't match the intent.
+    pattern-regex: '(?i)(//|/\*)[^\n]*(deny|block|revoke|reject|forbid)[^\n]*\n[^\n]*=\s*true'
+    metadata:
+      category: correctness
+      technology: [typescript, javascript]
+
+  # Java: Comment says "allow" but sets false
+  - id: java-test-comment-allow-sets-false
+    languages: [java]
+    severity: ERROR
+    message: |
+      TEST BUG: Comment indicates allowing access, but code sets 'false'.
+
+      The comment suggests allowing/granting access, but the code sets a value to false.
+      This semantic mismatch often indicates the test setup doesn't match the intent.
+    pattern-regex: '(?i)(//|/\*)[^\n]*(allow|grant|permit|give.*access)[^\n]*\n[^\n]*=\s*false'
+    metadata:
+      category: correctness
+      technology: [java]
+
+  # Generic: assert True/False mismatch with test name
+  - id: go-test-assert-mismatch-deny
+    languages: [go]
+    severity: WARNING
+    message: |
+      Test named "deny" or "denied" but asserts Allowed=true.
+
+      The test name suggests it tests denial behavior, but the assertion
+      expects Allowed to be true. This may indicate:
+      1. Test name is misleading
+      2. Assertion is wrong
+      3. Test logic is inverted
+
+      Review: Does the assertion match what the test name implies?
+    patterns:
+      - pattern-either:
+          - pattern: assert.$METHOD($T, $RESP.Allowed)
+          - pattern: assert.True($T, $RESP.Allowed)
+      - pattern-inside: |
+          t.Run($NAME, func(...) {
+            ...
+          })
+      - metavariable-regex:
+          metavariable: $NAME
+          regex: '(?i).*deny.*|.*denied.*|.*reject.*|.*block.*'
+    metadata:
+      category: correctness
+      technology: [go]
+
+  # Generic: assert mismatch - test name says "allow" but asserts false
+  - id: go-test-assert-mismatch-allow
+    languages: [go]
+    severity: WARNING
+    message: |
+      Test named "allow" or "allowed" but asserts Allowed=false or uses assertFalse.
+
+      The test name suggests it tests allowing behavior, but the assertion
+      expects Allowed to be false. This may indicate:
+      1. Test name is misleading
+      2. Assertion is wrong
+      3. Test logic is inverted
+
+      Review: Does the assertion match what the test name implies?
+    patterns:
+      - pattern-either:
+          - pattern: assert.False($T, $RESP.Allowed)
+      - pattern-inside: |
+          t.Run($NAME, func(...) {
+            ...
+          })
+      - metavariable-regex:
+          metavariable: $NAME
+          regex: '(?i).*allow.*|.*grant.*|.*permit.*'
+    metadata:
+      category: correctness
+      technology: [go]
+
+  # ============ React Key Prop Issues ============
+
+  # React: Component in map/loop without key prop
+  - id: react-missing-key-in-map
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: |
+      React component rendered in map() without a 'key' prop.
+
+      When rendering lists in React, each child element needs a unique 'key' prop.
+      Missing keys can cause:
+      1. React warnings in console
+      2. Performance issues (inefficient reconciliation)
+      3. State bugs when list items are reordered
+
+      Fix: Add a unique key prop, typically using item.id:
+      ```jsx
+      items.map(item => <Component key={item.id} ... />)
+      ```
+
+      DO NOT use array index as key if the list can be reordered/filtered.
+    patterns:
+      - pattern-inside: |
+          $ARRAY.map(($ITEM) => ...)
+      - pattern: <$COMPONENT ... />
+      - pattern-not: <$COMPONENT key={...} ... />
+    metadata:
+      category: correctness
+      technology: [react, typescript, javascript]
+
+  # React: Component in switch/case rendered from array without key
+  - id: react-switch-component-from-array-no-key
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: |
+      Component rendered in switch case without 'key' prop.
+
+      When a component is rendered based on data from an array (like switch(origin)),
+      and the original data comes from a mapped array, ensure the component has a 'key'.
+
+      This is especially important when:
+      1. The component replaces another component (like a loader)
+      2. The parent component is part of a list/map
+
+      Fix: Pass the key from the parent context:
+      ```jsx
+      <Component key={item.id} data={item} />
+      ```
+    patterns:
+      - pattern-inside: |
+          switch ($VAR) {
+            case $CASE:
+              return <$COMPONENT ... />
+            ...
+          }
+      - pattern: return <$COMPONENT ... />
+      - pattern-not: return <$COMPONENT key={...} ... />
+    metadata:
+      category: correctness
+      technology: [react, typescript, javascript]
+
+  # React: Using array index as key (anti-pattern)
+  - id: react-index-as-key
+    languages: [typescript, javascript]
+    severity: INFO
+    message: |
+      Using array index as React key may cause issues.
+
+      Using index as key can cause problems when:
+      1. List items can be reordered
+      2. Items can be inserted/removed from the middle
+      3. Items have associated state
+
+      Prefer using a unique identifier from the data (like item.id).
+
+      Only use index as key when:
+      - The list is static and will never change
+      - Items have no stable IDs
+      - The list will never be reordered or filtered
+    patterns:
+      - pattern-inside: |
+          $ARRAY.map(($ITEM, $INDEX) => ...)
+      - pattern-either:
+          - pattern: <$COMPONENT key={$INDEX} ... />
+          - pattern: <$COMPONENT key={$INDEX.toString()} ... />
+    metadata:
+      category: correctness
+      technology: [react, typescript, javascript]
+
+  # ============ Boolean Logic Errors ============
+
+  # Go: Function returns same value in all branches
+  - id: go-func-returns-same-value-all-branches
+    languages: [go]
+    severity: ERROR
+    message: |
+      Function returns the same value in all code paths.
+
+      This function returns the same boolean value (false or true) regardless of the
+      conditional logic. This is likely a bug - the conditional check has no effect
+      on the return value.
+
+      Common causes:
+      1. Copy-paste error - forgot to change return value
+      2. Logic inversion - negated the wrong variable
+      3. Incomplete implementation - placeholder return values
+
+      Example bug:
+      ```go
+      func isEnabled(flag bool) bool {
+          if flag {
+              return false  // BUG: should be true
+          }
+          return false
+      }
+      ```
+
+      Fix: Ensure different branches return different values, or simplify to a single return.
+    patterns:
+      - pattern: |
+          func $FUNC(...) bool {
+            ...
+            if $COND {
+              return false
+            }
+            return false
+          }
+    metadata:
+      category: correctness
+      technology: [go]
+
+  - id: go-func-returns-true-all-branches
+    languages: [go]
+    severity: ERROR
+    message: |
+      Function returns true in all code paths.
+
+      This function returns true regardless of the conditional logic.
+      The conditional check has no effect on the return value - this is likely a bug.
+    patterns:
+      - pattern: |
+          func $FUNC(...) bool {
+            ...
+            if $COND {
+              return true
+            }
+            return true
+          }
+    metadata:
+      category: correctness
+      technology: [go]
+
+  # Go: Negated variable checked then returns opposite of intent
+  - id: go-negated-bool-returns-false
+    languages: [go]
+    severity: WARNING
+    message: |
+      Suspicious pattern: negated boolean variable always leads to false return.
+
+      Pattern detected:
+      ```go
+      enabled := !someCheck()
+      if enabled {
+          return false
+      }
+      return false
+      ```
+
+      This is suspicious because:
+      1. The variable is negated from its source
+      2. All code paths return the same value (false)
+      3. The function name or variable name suggests it should return true in some case
+
+      This often indicates inverted logic or a copy-paste error.
+      Consider: should one branch return true instead?
+    patterns:
+      - pattern: |
+          $VAR := !$EXPR
+          ...
+          if $VAR {
+            return false
+          }
+          return false
+    metadata:
+      category: correctness
+      technology: [go]
+
+  # Go: Enable/disable function always returns false
+  - id: go-enable-func-always-false
+    languages: [go]
+    severity: ERROR
+    message: |
+      Function named 'enable...' always returns false.
+
+      A function with 'enable' in its name suggests it should return true when
+      the feature/functionality is enabled. However, this function returns false
+      in all code paths, meaning the feature is never enabled.
+
+      This is likely a logic bug. Review the conditional logic and return values.
+
+      Common fix: Change one of the return values to true, or fix the condition logic.
+    pattern-regex: 'func\s+[eE]nable\w*\s*\([^)]*\)\s*bool\s*\{[^}]*return\s+false[^}]*return\s+false[^}]*\}'
+    metadata:
+      category: correctness
+      technology: [go]
+
+  # Go: Disable function always returns true
+  - id: go-disable-func-always-true
+    languages: [go]
+    severity: ERROR
+    message: |
+      Function named 'disable...' always returns true.
+
+      A function with 'disable' in its name suggests it should return true when
+      something is disabled. However, if all paths return true, check if this is intended.
+    pattern-regex: 'func\s+[dD]isable\w*\s*\([^)]*\)\s*bool\s*\{[^}]*return\s+true[^}]*return\s+true[^}]*\}'
+    metadata:
+      category: correctness
+      technology: [go]
+
+  # Generic: If-else both return same value
+  - id: go-if-else-same-return
+    languages: [go]
+    severity: WARNING
+    message: |
+      If-else branches return the same value.
+
+      Both branches of this if-else statement return the same value,
+      making the conditional check pointless. This is often a bug.
+
+      Either:
+      1. One branch should return a different value
+      2. The conditional and one branch can be removed
+    patterns:
+      - pattern-either:
+          - pattern: |
+              if $COND {
+                return false
+              } else {
+                return false
+              }
+          - pattern: |
+              if $COND {
+                return true
+              } else {
+                return true
+              }
+          - pattern: |
+              if $COND {
+                return nil
+              } else {
+                return nil
+              }
+    metadata:
+      category: correctness
+      technology: [go]
+
+  # Python: Function returns same boolean in all branches
+  - id: python-func-returns-same-bool
+    languages: [python]
+    severity: ERROR
+    message: |
+      Function returns the same boolean value in all branches.
+
+      This function returns False (or True) regardless of the conditional logic.
+      The condition has no effect on the return value - this is likely a bug.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              def $FUNC(...):
+                ...
+                if $COND:
+                  return False
+                return False
+          - pattern: |
+              def $FUNC(...):
+                ...
+                if $COND:
+                  return True
+                return True
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # TypeScript/JavaScript: Function returns same boolean in all branches
+  - id: ts-func-returns-same-bool
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: |
+      Function returns the same boolean value in all branches.
+
+      This function returns false (or true) regardless of the conditional logic.
+      The condition has no effect on the return value - this is likely a bug.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              function $FUNC(...) {
+                ...
+                if ($COND) {
+                  return false;
+                }
+                return false;
+              }
+          - pattern: |
+              function $FUNC(...) {
+                ...
+                if ($COND) {
+                  return true;
+                }
+                return true;
+              }
+    metadata:
+      category: correctness
+      technology: [typescript, javascript]
+
+  # Java: Method returns same boolean in all branches
+  - id: java-method-returns-same-bool
+    languages: [java]
+    severity: ERROR
+    message: |
+      Method returns the same boolean value in all branches.
+
+      This method returns false (or true) regardless of the conditional logic.
+      The condition has no effect on the return value - this is likely a bug.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $RET $METHOD(...) {
+                ...
+                if ($COND) {
+                  return false;
+                }
+                return false;
+              }
+          - pattern: |
+              $RET $METHOD(...) {
+                ...
+                if ($COND) {
+                  return true;
+                }
+                return true;
+              }
+    metadata:
+      category: correctness
+      technology: [java]
+
+  # Go: Condition variable unused - logic may be inverted
+  - id: go-bool-var-negated-then-ignored
+    languages: [go]
+    severity: WARNING
+    message: |
+      Boolean variable is negated but the result doesn't affect the return value.
+
+      Pattern detected: A boolean is assigned with negation (!), then checked,
+      but all paths lead to the same outcome. The negation may be a mistake.
+
+      Example:
+      ```go
+      enabled := !isFeatureOn()  // negated
+      if enabled {
+          return false
+      }
+      return false  // same return regardless
+      ```
+
+      Review: Should the function return `!enabled` or `enabled` directly?
+    patterns:
+      - pattern: |
+          $VAR := !$EXPR
+          ...
+          return false
+    metadata:
+      category: correctness
+      technology: [go]
+
+  # ============ Syntax/Typo Errors ============
+
+  # Java: Double semicolon syntax error
+  - id: java-double-semicolon
+    languages: [java]
+    severity: WARNING
+    message: |
+      Double semicolon detected - likely a typo.
+
+      The code contains ';;' which is usually unintentional. While Java allows
+      empty statements, double semicolons typically indicate:
+      1. Copy-paste error
+      2. Accidental key repeat
+      3. Incomplete code modification
+
+      Fix: Remove the extra semicolon.
+
+      Example:
+      ```java
+      // Wrong
+      private String name = "test";;
+
+      // Correct
+      private String name = "test";
+      ```
+    pattern-regex: '[^;]\s*;\s*;'
+    metadata:
+      category: correctness
+      technology: [java]
+
+  # Multiple languages: Double semicolon at end of statement
+  - id: generic-double-semicolon-eol
+    languages: [java, typescript, javascript, c, cpp, csharp]
+    severity: WARNING
+    message: |
+      Double semicolon at end of line - likely a typo.
+
+      Found ';;' which usually indicates a copy-paste error or typo.
+      Remove the extra semicolon.
+    pattern-regex: ';\s*;\s*$'
+    metadata:
+      category: correctness
+      technology: [java, typescript, javascript, c, cpp, csharp]
+
+  # Java: Triple or more semicolons
+  - id: java-multiple-semicolons
+    languages: [java, typescript, javascript, c, cpp, csharp]
+    severity: ERROR
+    message: |
+      Multiple consecutive semicolons detected (3 or more).
+
+      This is almost certainly a mistake. Review and fix the code.
+    pattern-regex: ';{3,}'
+    metadata:
+      category: correctness
+      technology: [java, typescript, javascript, c, cpp, csharp]
+
+  # Java: Semicolon after class/method opening brace (common typo)
+  - id: java-semicolon-after-brace
+    languages: [java]
+    severity: ERROR
+    message: |
+      Semicolon immediately after opening brace - likely a typo.
+
+      Pattern '{;' is almost always a mistake. This might indicate:
+      1. Accidentally added semicolon
+      2. Incomplete refactoring
+      3. Copy-paste error
+
+      Fix: Remove the semicolon after the brace.
+    pattern-regex: '\{\s*;'
+    metadata:
+      category: correctness
+      technology: [java]
+
+  # JavaScript/TypeScript: Double semicolon
+  - id: ts-double-semicolon
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: |
+      Double semicolon detected - likely a typo.
+
+      Found ';;' which is usually unintentional. Remove the extra semicolon.
+
+      Note: In for loops, ';;' is valid (e.g., `for(;;)`), but outside of
+      for loop headers, this is typically a mistake.
+    pattern-regex: '[^(]\s*;\s*;[^)]'
+    metadata:
+      category: correctness
+      technology: [typescript, javascript]
+
+  # Go: Double semicolon (rare but possible)
+  - id: go-double-semicolon
+    languages: [go]
+    severity: WARNING
+    message: |
+      Double semicolon detected in Go code.
+
+      Go rarely uses explicit semicolons. Double semicolons are almost
+      certainly a mistake.
+    pattern-regex: ';\s*;'
+    metadata:
+      category: correctness
+      technology: [go]
+
+  # C/C++: Double semicolon outside for loop
+  - id: c-double-semicolon
+    languages: [c, cpp]
+    severity: WARNING
+    message: |
+      Double semicolon detected - likely a typo.
+
+      Found ';;' outside of a for loop header. This is usually unintentional.
+      Remove the extra semicolon.
+    pattern-regex: '[^(]\s*;\s*;[^)]'
+    metadata:
+      category: correctness
+      technology: [c, cpp]
+
+  # Python: Unnecessary semicolon (style issue)
+  - id: python-unnecessary-semicolon
+    languages: [python]
+    severity: INFO
+    message: |
+      Unnecessary semicolon in Python code.
+
+      Python doesn't require semicolons at the end of statements.
+      While valid, semicolons are not idiomatic Python and may indicate
+      code ported from another language.
+
+      Consider removing the semicolon for cleaner, more Pythonic code.
+    pattern-regex: ';\s*$'
+    metadata:
+      category: style
+      technology: [python]
+
+  # Generic: Empty statement after control structure
+  - id: java-empty-statement-after-control
+    languages: [java]
+    severity: ERROR
+    message: |
+      Empty statement (extra semicolon) after control structure.
+
+      An extra semicolon after if/while/for creates an empty body, which
+      almost always indicates a bug. The intended block won't be executed
+      conditionally.
+
+      Example bug:
+      ```java
+      if (condition);  // BUG: semicolon makes if do nothing
+      {
+          doSomething();  // This always runs!
+      }
+      ```
+
+      Fix: Remove the semicolon after the control structure.
+    patterns:
+      - pattern-either:
+          - pattern-regex: 'if\s*\([^)]+\)\s*;'
+          - pattern-regex: 'while\s*\([^)]+\)\s*;(?!\s*$)'
+          - pattern-regex: 'for\s*\([^)]*\)\s*;(?!\s*$)'
+    metadata:
+      category: correctness
+      technology: [java]
+
+  # C/C++/JavaScript: Empty statement after control structure
+  - id: generic-empty-statement-after-control
+    languages: [c, cpp, typescript, javascript]
+    severity: ERROR
+    message: |
+      Empty statement (extra semicolon) after control structure.
+
+      An extra semicolon after if/while/for creates an empty body.
+      This is almost always a bug.
+
+      Example:
+      ```c
+      if (x > 0);  // BUG!
+          doSomething();  // Always runs
+      ```
+    patterns:
+      - pattern-either:
+          - pattern-regex: 'if\s*\([^)]+\)\s*;\s*\n'
+          - pattern-regex: 'while\s*\([^)]+\)\s*;\s*\n'
+    metadata:
+      category: correctness
+      technology: [c, cpp, typescript, javascript]
+
+  # ============ Feature Flag Consistency Issues ============
+
+  # Generic: Mixed feature flag versions in same file (V1 vs V2)
+  - id: generic-mixed-feature-flag-versions
+    languages: [java, typescript, javascript, go, python]
+    severity: WARNING
+    message: |
+      Potential inconsistent feature flag versions detected in the same file.
+
+      This file appears to use both V1 and V2 (or similar versioned variants) of
+      a feature flag. This often indicates a bug where:
+
+      1. Some code paths check the old flag version
+      2. Other code paths check the new flag version
+      3. If only one version is enabled, behavior becomes inconsistent
+
+      Common issues:
+      - Permission/cleanup logic uses V1 flag while main logic uses V2
+      - Migration code forgotten after flag version upgrade
+      - Copy-paste from old code without updating flag reference
+
+      Review all feature flag checks in this file to ensure consistency.
+    pattern-regex: '(?i)(feature|flag|toggle)[._]?\w*[._]?(v1|version1|_v1)\b[\s\S]{1,2000}(feature|flag|toggle)[._]?\w*[._]?(v2|version2|_v2)\b|(feature|flag|toggle)[._]?\w*[._]?(v2|version2|_v2)\b[\s\S]{1,2000}(feature|flag|toggle)[._]?\w*[._]?(v1|version1|_v1)\b'
+    metadata:
+      category: correctness
+      technology: [java, typescript, javascript, go, python]
+
+  # Java: Mixed feature flag checks with isFeatureEnabled
+  - id: java-mixed-feature-flag-enabled
+    languages: [java]
+    severity: WARNING
+    message: |
+      Multiple different feature flags checked in the same class.
+
+      This class checks multiple feature flags that appear to be related
+      (similar names). This may indicate inconsistent feature flag usage:
+
+      1. Different methods may check different flags for the same feature
+      2. Newer code may use updated flag while older code uses legacy flag
+      3. Cleanup/permission logic may be guarded by wrong flag
+
+      Ensure all related functionality uses the same feature flag consistently.
+    pattern-regex: 'isFeatureEnabled\s*\([^)]*AUTHZ[^)]*\)[\s\S]{1,3000}isFeatureEnabled\s*\([^)]*AUTHZ[^)]*\)'
+    metadata:
+      category: correctness
+      technology: [java]
+
+  # Java: Feature flag in event listener may be inconsistent
+  - id: java-event-listener-feature-flag
+    languages: [java]
+    severity: INFO
+    message: |
+      Feature flag check in event listener/handler.
+
+      Event listeners that are guarded by feature flags should use the same
+      flag version as the code that triggers the events. If the main feature
+      uses FLAG_V2 but the cleanup listener uses FLAG_V1, the cleanup may not
+      run when expected.
+
+      Review: Does this flag match the flag used in related components?
+    patterns:
+      - pattern-inside: |
+          $LISTENER.register(new $TYPE() {
+            ...
+          })
+      - pattern: $X.isFeatureEnabled($FLAG)
+    metadata:
+      category: correctness
+      technology: [java]
+
+  # Generic: Versioned constant with different versions in same file
+  - id: generic-versioned-constants-mixed
+    languages: [java, typescript, javascript, go, python, c, cpp]
+    severity: WARNING
+    message: |
+      Different versions of a similar named constant/flag in the same file.
+
+      Found references to both VERSION/V1 and VERSION_V2 (or similar patterns)
+      of what appears to be the same feature or configuration.
+
+      This inconsistency often leads to bugs where:
+      - Old code uses legacy version
+      - New code uses updated version
+      - Behavior differs based on which version is enabled
+
+      Audit all references and ensure consistent versioning.
+    pattern-regex: '(?i)(\w+)_(v1|version_?1)\b[\s\S]{1,3000}\1_(v2|version_?2)\b|\1_(v2|version_?2)\b[\s\S]{1,3000}\1_(v1|version_?1)\b'
+    metadata:
+      category: correctness
+      technology: [java, typescript, javascript, go, python, c, cpp]
+
+  # TypeScript/JavaScript: Mixed feature flags
+  - id: ts-mixed-feature-flags
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: |
+      Multiple feature flag checks with different flag names.
+
+      This file checks multiple feature flags that may be related.
+      Ensure consistent flag usage across all related code paths.
+
+      Common issue: Newer code uses FLAG_V2 while event handlers or
+      cleanup code still checks FLAG_V1.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              if ($OBJ.isEnabled($FLAG1)) { ... }
+              ...
+              if ($OBJ.isEnabled($FLAG2)) { ... }
+          - pattern: |
+              $OBJ.isFeatureEnabled($FLAG1)
+              ...
+              $OBJ.isFeatureEnabled($FLAG2)
+    metadata:
+      category: correctness
+      technology: [typescript, javascript]
+
+  # Go: Feature flag version mismatch
+  - id: go-feature-flag-version-mismatch
+    languages: [go]
+    severity: WARNING
+    message: |
+      Potential feature flag version mismatch.
+
+      Found multiple feature flag checks that may be inconsistent.
+      If using versioned feature flags (e.g., FeatureV1, FeatureV2),
+      ensure all related code paths use the same version.
+    pattern-regex: '(?i)(IsEnabled|IsFeatureEnabled|FeatureFlag)\s*\(\s*\w+V1[\s\S]{1,2000}(IsEnabled|IsFeatureEnabled|FeatureFlag)\s*\(\s*\w+V2|(IsEnabled|IsFeatureEnabled|FeatureFlag)\s*\(\s*\w+V2[\s\S]{1,2000}(IsEnabled|IsFeatureEnabled|FeatureFlag)\s*\(\s*\w+V1'
+    metadata:
+      category: correctness
+      technology: [go]
+
+  # Python: Feature flag version mismatch
+  - id: python-feature-flag-version-mismatch
+    languages: [python]
+    severity: WARNING
+    message: |
+      Potential feature flag version mismatch in the same file.
+
+      Found references to different versions of what appears to be the same
+      feature flag. Ensure consistent flag usage.
+    pattern-regex: "(?i)(is_enabled|is_feature_enabled|feature_flag)\\s*\\(\\s*[\"']?\\w+_v1[\\s\\S]{1,2000}(is_enabled|is_feature_enabled|feature_flag)\\s*\\(\\s*[\"']?\\w+_v2"
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # Java: Specific pattern for AUTHZ V1 vs V2 mismatch (like in screenshot)
+  - id: java-authz-flag-version-mismatch
+    languages: [java]
+    severity: ERROR
+    message: |
+      Authorization feature flag version mismatch detected.
+
+      Found both AUTHZ (V1) and AUTHZ_V2 checks in the same file.
+      This is likely a bug:
+
+      - If AUTHZ_V2 is enabled but AUTHZ (V1) is not, code guarded by
+        the V1 flag won't execute
+      - This commonly affects permission cleanup, event listeners,
+        or secondary features
+
+      All authorization-related code should use the same flag version.
+      If migrating to V2, update ALL related checks including:
+      - Event listeners
+      - Permission cleanup
+      - Admin handlers
+    pattern-regex: '(?i)FINE_GRAINED_AUTHZ\b(?!_V2)[\s\S]{1,5000}FINE_GRAINED_AUTHZ_V2|FINE_GRAINED_AUTHZ_V2[\s\S]{1,5000}FINE_GRAINED_AUTHZ\b(?!_V2)'
+    metadata:
+      category: correctness
+      technology: [java]
+
+  # Generic: Event listener with different guard than main feature
+  - id: generic-listener-guard-mismatch
+    languages: [java, typescript, javascript]
+    severity: WARNING
+    message: |
+      Event listener may have inconsistent feature flag guard.
+
+      This event listener/handler is guarded by a feature flag check.
+      Ensure this flag matches the flag used by code that:
+      1. Triggers these events
+      2. Creates the data being cleaned up
+      3. Implements the main feature
+
+      Mismatched flags between main logic and cleanup handlers can cause
+      orphaned data or inconsistent state.
+    patterns:
+      - pattern-inside: |
+          $X.register($LISTENER)
+      - pattern-either:
+          - pattern: if ($COND.isFeatureEnabled(...)) { ... }
+          - pattern: if ($COND.isEnabled(...)) { ... }
+    metadata:
+      category: correctness
+      technology: [java, typescript, javascript]
+
+  # ============ Localization/i18n Language Mismatch ============
+
+  # Detect Italian text in Lithuanian locale files
+  - id: i18n-italian-in-lithuanian-file
+    languages: [generic]
+    severity: ERROR
+    message: |
+      Localization language mismatch: Italian text found in Lithuanian locale file.
+
+      The file is named *_lt.properties (Lithuanian locale), but contains Italian text.
+      Common Italian patterns detected:
+      - "Installa una delle seguenti applicazioni" (Italian for "Install one of the following applications")
+      - "sul tuo cellulare" (Italian for "on your cellphone")
+
+      This should be translated to Lithuanian. Example:
+      - Italian: "Installa una delle seguenti applicazioni sul tuo cellulare"
+      - Lithuanian: "Įdiekite vieną iš šių programėlių savo mobiliajame telefone"
+
+      This is likely a copy-paste error from an Italian translation file.
+    pattern-regex: '(?i)(Installa|applicazioni|cellulare|seguenti|delle|una|sul\s+tuo)'
+    paths:
+      include:
+        - "*_lt.properties"
+        - "**/lt/*.properties"
+        - "**/lt-LT/*.properties"
+    metadata:
+      category: correctness
+      technology: [java, properties]
+      cwe: "CWE-710: Improper Adherence to Coding Standards"
+
+  # Detect Italian text in any non-Italian locale file
+  - id: i18n-italian-in-wrong-locale
+    languages: [generic]
+    severity: WARNING
+    message: |
+      Potential localization error: Italian text detected in non-Italian locale file.
+
+      Italian phrases detected in a file that doesn't appear to be for Italian locale.
+      Common Italian patterns:
+      - "Installa" (Install)
+      - "applicazioni" (applications)
+      - "cellulare" (cellphone)
+      - "sul tuo" (on your)
+
+      Verify this is intentional or fix the translation to match the file's locale.
+    pattern-regex: '(?i)\b(Installa\s+una|delle\s+seguenti|sul\s+tuo\s+cellulare|applicazioni\s+sul)'
+    paths:
+      exclude:
+        - "*_it.properties"
+        - "**/it/*.properties"
+        - "**/it-IT/*.properties"
+        - "**/italian/**"
+      include:
+        - "*.properties"
+    metadata:
+      category: correctness
+      technology: [java, properties]
+
+  # Detect common wrong language patterns in locale files
+  - id: i18n-locale-filename-content-mismatch
+    languages: [generic]
+    severity: ERROR
+    message: |
+      Localization file content doesn't match filename locale.
+
+      The filename indicates a specific locale, but the content appears to be
+      in a different language. This is a critical i18n error that breaks
+      user experience for the target locale.
+
+      Common causes:
+      1. Copy-paste from wrong source locale file
+      2. Merge conflict resolution error
+      3. Incomplete translation update
+
+      Check the entire file for content in the wrong language.
+    pattern-regex: '(?i)=(Installa\s+una\s+delle\s+seguenti\s+applicazioni)'
+    paths:
+      include:
+        - "*_lt.properties"
+        - "*_de.properties"
+        - "*_fr.properties"
+        - "*_es.properties"
+        - "*_pt.properties"
+        - "*_ru.properties"
+        - "*_zh.properties"
+        - "*_ja.properties"
+        - "*_ko.properties"
+    metadata:
+      category: correctness
+      technology: [java, properties]
+
+  # Detect Spanish in German locale
+  - id: i18n-spanish-in-german-file
+    languages: [generic]
+    severity: ERROR
+    message: |
+      Localization language mismatch: Spanish text found in German locale file.
+
+      The file is named *_de.properties (German locale), but contains Spanish text.
+      This should be translated to German.
+    pattern-regex: '(?i)\b(Instale|aplicaciones|celular|siguientes|en\s+su)'
+    paths:
+      include:
+        - "*_de.properties"
+        - "**/de/*.properties"
+        - "**/de-DE/*.properties"
+    metadata:
+      category: correctness
+      technology: [java, properties]
+
+  # Detect French in German locale
+  - id: i18n-french-in-german-file
+    languages: [generic]
+    severity: ERROR
+    message: |
+      Localization language mismatch: French text found in German locale file.
+
+      The file is named *_de.properties (German locale), but contains French text.
+      This should be translated to German.
+    pattern-regex: "(?i)\\b(Installez|applications|portable|suivantes|votre)"
+    paths:
+      include:
+        - "*_de.properties"
+        - "**/de/*.properties"
+        - "**/de-DE/*.properties"
+    metadata:
+      category: correctness
+      technology: [java, properties]
+
+  # Detect English in non-English locale (common mistake)
+  - id: i18n-english-in-non-english-locale
+    languages: [generic]
+    severity: WARNING
+    message: |
+      Potential untranslated English text in non-English locale file.
+
+      English phrases detected that may need translation.
+      Common untranslated patterns:
+      - "Install one of the following"
+      - "on your mobile phone"
+      - "Click here to"
+
+      This might be:
+      1. Intentional (technical terms often kept in English)
+      2. Missing translation that needs to be added
+      3. Placeholder text that was never translated
+    pattern-regex: '(?i)=(Install\s+one\s+of\s+the\s+following|on\s+your\s+(mobile\s+)?phone|Click\s+here\s+to)'
+    paths:
+      exclude:
+        - "*_en.properties"
+        - "**/en/*.properties"
+        - "**/en-US/*.properties"
+        - "**/en-GB/*.properties"
+      include:
+        - "*.properties"
+    metadata:
+      category: correctness
+      technology: [java, properties]
+
+  # Generic: Detect locale file with content from different locale
+  - id: i18n-mixed-locale-content
+    languages: [generic]
+    severity: WARNING
+    message: |
+      Properties file may contain mixed locale content.
+
+      This file appears to contain text in multiple languages.
+      Each locale file should only contain text in its target language.
+
+      Check for:
+      1. Copy-paste errors from other locale files
+      2. Incomplete translation merges
+      3. Wrong file edited during translation
+    pattern-regex: '(?i)(Installa\s+una|Installez\s+une|Installieren\s+Sie|Instalar\s+una)'
+    paths:
+      include:
+        - "*.properties"
+    metadata:
+      category: correctness
+      technology: [java, properties]
+
+  # ============ Inconsistent Null Handling Patterns ============
+
+  # Java: Supplier.get() used with null check in one place but not another
+  - id: java-inconsistent-supplier-null-check
+    languages: [java]
+    severity: WARNING
+    message: |
+      Inconsistent null handling for Supplier.get() result.
+
+      This code checks if `$SUPPLIER.get()` is null in some places but not others.
+      If the supplier can return null, ALL usages should handle it consistently.
+
+      Pattern detected: One method does `$SUPPLIER.get() == null ? ... : ...`
+      but other methods may call `$SUPPLIER.get().$METHOD()` directly.
+
+      This inconsistency can cause NullPointerException in methods that don't check.
+
+      Fix: Ensure all usages of this supplier handle null consistently:
+      ```java
+      // Either always check:
+      Model model = supplier.get();
+      return model == null ? defaultValue : model.getValue();
+
+      // Or use Optional:
+      return Optional.ofNullable(supplier.get())
+                     .map(Model::getValue)
+                     .orElse(defaultValue);
+      ```
+    patterns:
+      - pattern: |
+          $TYPE $VAR = $SUPPLIER.get();
+          return $VAR == null ? $DEFAULT : $VAR.$METHOD();
+    metadata:
+      category: correctness
+      technology: [java]
+
+  # Java: Direct method call on supplier.get() without null check
+  - id: java-supplier-get-no-null-check
+    languages: [java]
+    severity: WARNING
+    message: |
+      Calling method directly on Supplier.get() result without null check.
+
+      If the supplier can return null, this will throw NullPointerException.
+
+      Example issue:
+      ```java
+      return modelSupplier.get().getSubGroupsStream();  // NPE if get() returns null
+      ```
+
+      Fix: Add null check or use Optional:
+      ```java
+      Model model = modelSupplier.get();
+      return model == null ? Stream.empty() : model.getSubGroupsStream();
+
+      // Or:
+      return Optional.ofNullable(modelSupplier.get())
+                     .map(Model::getSubGroupsStream)
+                     .orElse(Stream.empty());
+      ```
+    patterns:
+      - pattern: $SUPPLIER.get().$METHOD(...)
+      - metavariable-regex:
+          metavariable: $SUPPLIER
+          regex: '.*[Ss]upplier$'
+    metadata:
+      category: correctness
+      technology: [java]
+
+  # Java: Inconsistent null check - ternary in one method, direct call in another (same class pattern)
+  - id: java-class-inconsistent-null-handling
+    languages: [java]
+    severity: WARNING
+    message: |
+      Potential inconsistent null handling across methods.
+
+      This class has methods that handle null from the same source differently:
+      - Some methods check: `obj == null ? default : obj.method()`
+      - Others call directly: `obj.method()` without null check
+
+      This inconsistency is dangerous because:
+      1. It suggests the source CAN return null (otherwise why check?)
+      2. Methods without checks will throw NullPointerException
+      3. Concurrent scenarios may expose the inconsistency
+
+      Review ALL methods in this class that use the same data source
+      and ensure consistent null handling.
+    pattern-regex: 'return\s+\w+\s*==\s*null\s*\?\s*\w+\s*:\s*\w+\.\w+\(\)'
+    metadata:
+      category: correctness
+      technology: [java]
+
+  # Java: Optional.get() without isPresent check
+  - id: java-optional-get-without-check
+    languages: [java]
+    severity: ERROR
+    message: |
+      Calling Optional.get() without checking isPresent() first.
+
+      This will throw NoSuchElementException if the Optional is empty.
+
+      Fix: Use safer alternatives:
+      ```java
+      // Instead of:
+      optional.get()
+
+      // Use:
+      optional.orElse(defaultValue)
+      optional.orElseGet(() -> computeDefault())
+      optional.orElseThrow(() -> new CustomException())
+      optional.ifPresent(value -> doSomething(value))
+      ```
+    patterns:
+      - pattern: $OPT.get()
+      - pattern-not-inside: |
+          if ($OPT.isPresent()) {
+            ...
+          }
+      - pattern-not-inside: |
+          $OPT.isPresent() && ...
+      - metavariable-regex:
+          metavariable: $OPT
+          regex: '.*[Oo]ptional.*|opt|maybe|result'
+    metadata:
+      category: correctness
+      technology: [java]
+
+  # Java: Null check followed by method call on potentially different reference
+  - id: java-null-check-wrong-variable
+    languages: [java]
+    severity: ERROR
+    message: |
+      Null check on one variable but method called on different variable.
+
+      Pattern: `if (a != null) { b.method(); }`
+
+      This is likely a bug - you're checking if 'a' is null but then using 'b'.
+      Either:
+      1. The null check should be on 'b'
+      2. The method call should be on 'a'
+    pattern-regex: 'if\s*\(\s*(\w+)\s*!=\s*null\s*\)\s*\{\s*[^}]*\b(?!\1\b)(\w+)\.\w+\s*\('
+    metadata:
+      category: correctness
+      technology: [java]
+
+  # Java: Method returns null but callers don't check
+  - id: java-nullable-return-not-checked
+    languages: [java]
+    severity: INFO
+    message: |
+      Method may return null (uses ternary with null) - ensure callers check.
+
+      This method can return null based on a condition. All callers should
+      handle the null case to avoid NullPointerException.
+
+      Consider:
+      1. Returning Optional<T> instead of nullable T
+      2. Documenting @Nullable annotation
+      3. Using Objects.requireNonNull() if null is actually a bug
+    pattern: |
+      return $COND ? null : $VALUE;
+    metadata:
+      category: correctness
+      technology: [java]
+
+  # Kotlin: Safe call inconsistency - using !! after ?. elsewhere
+  - id: kotlin-inconsistent-null-safety
+    languages: [kotlin]
+    severity: WARNING
+    message: |
+      Inconsistent null safety: using !! (not-null assertion) when ?. is used elsewhere.
+
+      If you use `?.` (safe call) on a variable, it implies the variable can be null.
+      Using `!!` on the same or similar variable is inconsistent and may throw NPE.
+
+      Example inconsistency:
+      ```kotlin
+      val x = obj?.getValue()  // implies obj can be null
+      val y = obj!!.getOther() // will throw if obj is null
+      ```
+
+      Fix: Use consistent null handling throughout:
+      ```kotlin
+      obj?.let {
+        val x = it.getValue()
+        val y = it.getOther()
+      }
+      ```
+    pattern-either:
+      - pattern: $VAR!!.$METHOD(...)
+    metadata:
+      category: correctness
+      technology: [kotlin]
+
+  # TypeScript: Inconsistent optional chaining
+  - id: ts-inconsistent-optional-chaining
+    languages: [typescript]
+    severity: WARNING
+    message: |
+      Inconsistent use of optional chaining on the same object.
+
+      Using `?.` on an object implies it can be null/undefined.
+      Directly accessing properties without `?.` on the same object is inconsistent.
+
+      Example:
+      ```typescript
+      const a = obj?.foo;     // implies obj can be null
+      const b = obj.bar;      // will throw if obj is null!
+      ```
+
+      Fix: Use consistent optional chaining:
+      ```typescript
+      const a = obj?.foo;
+      const b = obj?.bar;
+      ```
+    patterns:
+      - pattern: $OBJ?.$PROP1
+      - pattern: $OBJ.$PROP2
+    metadata:
+      category: correctness
+      technology: [typescript]
+
+  # Go: Inconsistent nil check - checking in one place but not another
+  - id: go-inconsistent-nil-check
+    languages: [go]
+    severity: WARNING
+    message: |
+      Inconsistent nil handling for the same variable/field.
+
+      If you check `if x == nil` in one place, it implies x can be nil.
+      Using x without nil check elsewhere may cause nil pointer dereference.
+
+      Review all usages of this variable and ensure consistent nil handling.
+    patterns:
+      - pattern: |
+          if $VAR == nil {
+            ...
+          }
+      - pattern: $VAR.$METHOD(...)
+    metadata:
+      category: correctness
+      technology: [go]
+
+  # Python: Inconsistent None check
+  - id: python-inconsistent-none-check
+    languages: [python]
+    severity: WARNING
+    message: |
+      Inconsistent None handling - checked in some places but not others.
+
+      If you check `if x is None` or `if x is not None`, it implies x can be None.
+      Using x.method() without checking elsewhere may cause AttributeError.
+
+      Consider using:
+      1. Consistent None checks throughout
+      2. Optional type hints to document nullability
+      3. Default values with `x or default`
+    patterns:
+      - pattern: |
+          if $VAR is None:
+            ...
+      - pattern: $VAR.$METHOD(...)
+    metadata:
+      category: correctness
+      technology: [python]
+
+  # Java: Stream from potentially null source
+  - id: java-stream-from-nullable
+    languages: [java]
+    severity: WARNING
+    message: |
+      Creating Stream from potentially null source.
+
+      If the source collection/object can be null, calling `.stream()` will throw NPE.
+
+      Fix options:
+      ```java
+      // Option 1: Null check with empty stream fallback
+      return model == null ? Stream.empty() : model.getItems().stream();
+
+      // Option 2: Use Optional
+      return Optional.ofNullable(model)
+                     .map(Model::getItems)
+                     .map(Collection::stream)
+                     .orElse(Stream.empty());
+
+      // Option 3: Use Stream.ofNullable (Java 9+)
+      return Stream.ofNullable(model)
+                   .flatMap(m -> m.getItems().stream());
+      ```
+    patterns:
+      - pattern: $VAR.stream()
+      - pattern-not-inside: |
+          if ($VAR != null) {
+            ...
+          }
+      - pattern-not-inside: |
+          $VAR != null ? ... : ...
+    metadata:
+      category: correctness
+      technology: [java]
+
+  # Java: getOrDefault pattern but still can NPE
+  - id: java-map-get-then-method-call
+    languages: [java]
+    severity: WARNING
+    message: |
+      Calling method on Map.get() result without null check.
+
+      Map.get() returns null if the key doesn't exist. Calling a method
+      directly on the result will throw NullPointerException.
+
+      Fix:
+      ```java
+      // Instead of:
+      map.get(key).doSomething()
+
+      // Use:
+      Optional.ofNullable(map.get(key)).ifPresent(v -> v.doSomething())
+      // Or:
+      Value v = map.get(key);
+      if (v != null) { v.doSomething(); }
+      // Or use getOrDefault:
+      map.getOrDefault(key, defaultValue).doSomething()
+      ```
+    patterns:
+      - pattern: $MAP.get($KEY).$METHOD(...)
+      - pattern-not: $MAP.getOrDefault($KEY, $DEFAULT).$METHOD(...)
+    metadata:
+      category: correctness
+      technology: [java]
+
