@@ -17,6 +17,99 @@ DiffCOT 是一个基于LLM的智能代码审查系统，支持对 GitHub Pull Re
 - 🎯 **自定义规则库**: 支持自定义 Semgrep 规则和 LLM 提示词规则
 - 🌐 **跨文件分析**: 自动提取相关上下文进行关联分析
 
+## 安装与使用
+
+### 环境要求
+
+- Python 3.12+
+- Node.js 18+
+- Semgrep CLI (可选，用于静态分析)
+
+`Python`用于构建项目的后端程序，`Node.js`用于构建项目前端。`Semgrep CLI`安装可按照如下命令执行。
+
+```bash
+# For macOS
+$ brew install semgrep
+
+# For Ubuntu/WSL/Linux/macOS
+$ python3 -m pip install semgrep
+```
+
+### 后端运行
+
+```bash
+cd backend
+
+# 创建虚拟环境(conda)
+conda create -n your_env_name python=3.12
+conda activate your_env_name
+
+# 安装依赖
+pip install -r requirements.txt
+
+# 启动后端服务
+python main.py
+# 或使用 uvicorn
+python -m uvicorn main:app --host 127.0.0.1 --port 8765 --reload
+```
+
+### 前端运行
+
+```bash
+# 另起一个终端
+cd frontend
+
+# 安装依赖
+npm install
+
+# 开发模式运行
+npm run dev:electron
+```
+### 配置说明
+
+1. **GitHub Token**: 在设置页面配置 GitHub Personal Access Token
+2. **AI Provider**: 支持 Claude (Anthropic) 和 GLM (智谱)
+3. **API Keys**: 在设置页面配置相应的 API Key
+
+### 使用流程
+#### 基础 Code Review 流程
+第 1 步：启动后端服务
+第 2 步：启动前端应用 或者直接运行安装好的应用程序。
+第 3 步：点击 New Repo，打开对话窗口。
+<div align="center">
+  <img src="docs/pic/fig1.png" alt="fig1"/>
+</div>
+第 4 步：在设置页面配置 GitHub Token 和 相关大模型厂商的API Key
+<div align="center">
+  <img src="docs/pic/fig2.png" alt="fig2"/>
+</div>
+第 5 步：在主界面输入 GitHub 仓库 URL，点击 Add 后自动爬取 Pull Request 数据。
+<div align="center">
+  <img src="docs/pic/fig3.png" alt="fig3"/>
+</div>
+第 6 步：选择要审查的 Pull Request，并点击 "Start Analysis" 开始审查
+<div align="center">
+  <img src="docs/pic/fig4.png" alt="fig4"/>
+</div>
+第 7 步：等待 AI 分析完成，查看审查报告
+<div align="center">
+  <img src="docs/pic/fig5.png" alt="fig5"/>
+</div>
+第 8 步：分析完成后窗口会弹出 "Comment on GitHub" 的按钮，点击该按钮，审查报告自动提交至远程仓库对应的PR当中。
+
+
+#### Semgrep 自定义规则库添加
+第 1 步：点击应用左下角的 Semgrep Rules，进入自定义规则库管理页面。
+<div align="center">
+  <img src="docs/pic/fig6.png" alt="fig6"/>
+</div>
+第 2 步：根据自己的开发审查需求添加或者删除规则，并支持点击`Validate`验证规则是否正确和基于id搜索规则的功能。
+<div align="center">
+  <img src="docs/pic/fig7.png" alt="fig7"/>
+</div>
+
+具体的 Semgrep Rules 规范可见[Writing Semgrep rules](https://semgrep.dev/docs/writing-rules/overview)
+
 ## 目录结构
 
 ### 前端 (`frontend/`)
@@ -208,61 +301,6 @@ flowchart TB
     style Backend fill:#fff3e0
     style Clients fill:#f1f8e9
 ```
-
-## 安装与使用
-
-### 环境要求
-
-- Python 3.12+
-- Node.js 18+
-- Semgrep CLI (可选，用于静态分析)
-
-### 后端运行
-
-```bash
-cd backend
-
-# 创建虚拟环境(conda)
-conda create -n your_env_name python=3.12
-conda activate your_env_name
-
-# 安装依赖
-pip install -r requirements.txt
-
-# 启动后端服务
-python main.py
-# 或使用 uvicorn
-python -m uvicorn main:app --host 127.0.0.1 --port 8765 --reload
-```
-
-### 前端运行
-
-```bash
-# 另起一个终端
-cd frontend
-
-# 安装依赖
-npm install
-
-# 开发模式运行
-npm run dev:electron
-```
-
-### 配置说明
-
-1. **GitHub Token**: 在设置页面配置 GitHub Personal Access Token
-2. **AI Provider**: 支持 Claude (Anthropic) 和 GLM (智谱)
-3. **API Keys**: 在设置页面配置相应的 API Key
-
-### 使用流程
-
-1. 启动后端服务 (`python main.py`)
-2. 启动前端应用 (`npm run dev`)
-3. 在设置页面配置 GitHub Token 和 AI API Key
-4. 在主界面输入 GitHub 仓库 URL
-5. 选择要审查的 Pull Request
-6. 点击 "Start Analysis" 开始审查
-7. 等待 AI 分析完成，查看审查报告
 
 ## 自定义规则
 

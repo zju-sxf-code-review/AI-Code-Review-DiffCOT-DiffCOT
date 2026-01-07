@@ -5,6 +5,9 @@ fastapi
 uvicorn[standard]
 pydantic
 
+# Static Analysis
+semgrep
+
 # HTTP Client
 requests
 httpx
