@@ -8,7 +8,7 @@
 
 DiffCOT 是一个基于LLM的智能代码审查系统，支持对 GitHub Pull Request 进行自动化代码审查，结合静态分析工具 Semgrep 和 通用大模型分析能力，发现代码中的潜在问题。
 
-**Greptile - Benchmark 测试结果可见 [详情](./docs/benchmark_result.md)**
+**Greptile - Benchmark 测试报告可见 [评测报告](./docs/benchmark_result.md)**
 
 ## 目录
 

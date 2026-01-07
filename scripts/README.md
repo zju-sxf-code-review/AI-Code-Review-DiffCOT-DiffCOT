@@ -1,6 +1,13 @@
-# 打包发布
+# Scripts 脚本使用
 
-将 DiffCOT 打包为独立的桌面应用程序：
+将 DiffCOT 打包为独立的桌面应用程序：以及快速复制 GitHub 仓库 Pull Request.
+## 复制 PR
+
+使用前务必记得配置个人 GitHub  token api
+
+```bash
+python ./AutoFetch_pr_copy.py
+```
 
 ## 快速打包
 
