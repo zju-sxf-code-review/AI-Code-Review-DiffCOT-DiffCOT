@@ -155,9 +155,16 @@ export const Chat: React.FC<ChatProps> = ({
   const [isLoadingPRs, setIsLoadingPRs] = useState(false);
   const [selectedPRId, setSelectedPRId] = useState<number | null>(null);
   const [isPostingComment, setIsPostingComment] = useState(false);
-  const [lastReviewResult, setLastReviewResult] = useState<CodeReviewResult | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const repoInputRef = useRef<HTMLInputElement>(null);
+
+  // Use conversation-level lastReviewResult for persistence across session switches
+  const lastReviewResult = conversation.lastReviewResult ?? null;
+  const setLastReviewResult = (result: CodeReviewResult | null) => {
+    if (onUpdateConversation) {
+      onUpdateConversation({ lastReviewResult: result ?? undefined });
+    }
+  };
 
   // Use conversation-level isAnalyzing state for parallel analysis support
   const isAnalyzing = conversation.isAnalyzing ?? false;

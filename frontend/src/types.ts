@@ -46,6 +46,29 @@ export interface GitHubRepo {
   default_branch?: string;
 }
 
+// Review Issue (for code review results)
+export interface ReviewIssue {
+  severity: string;
+  type: string;
+  file: string;
+  line?: number | string;
+  end_line?: number | string;
+  description: string;
+  suggestion?: string;
+  suggested_change?: string;
+}
+
+// Code Review Result (for Comment on GitHub button)
+export interface CodeReviewResultType {
+  summary: string;
+  overall_assessment: string;
+  score: number;
+  issues: ReviewIssue[];
+  positive_feedback: string[];
+  suggestions: string[];
+  raw_review?: string;
+}
+
 export interface Conversation {
   id: string;
   title: string;
@@ -61,4 +84,6 @@ export interface Conversation {
   selected_pr?: PullRequest;
   // Analysis state (persisted across component re-renders)
   isAnalyzing?: boolean;
+  // Last review result for "Comment on GitHub" button (persisted)
+  lastReviewResult?: CodeReviewResultType;
 }
