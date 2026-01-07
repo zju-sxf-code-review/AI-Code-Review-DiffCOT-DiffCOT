@@ -110,9 +110,9 @@ npm run dev:electron
 
 #### 基础 Code Review 流程
 
-第 1 步：启动后端服务
-第 2 步：启动前端应用 或者直接运行安装好的应用程序。
-第 3 步：点击 New Repo，打开对话窗口。
+第 1 步：启动后端服务。<br>
+第 2 步：启动前端应用 或者直接运行安装好的应用程序。<br>
+第 3 步：点击 New Repo，打开对话窗口。<br>
 
 <div align="center">
   <img src="docs/pic/fig1.png" alt="fig1"/>
