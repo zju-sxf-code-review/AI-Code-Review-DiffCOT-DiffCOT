@@ -5,10 +5,12 @@
 </div>
 
 ---
+## 项目简介
+DiffCOT 是一个基于LLM的智能代码审查系统，支持对 GitHub Pull Request 进行自动化代码审查，结合**静态分析工具**（如Semgrep）和**通用大模型+多类知识库**的Agent系统分析能力，发现代码中的已有及潜在问题。
+> 关键词: Agent; 知识库;工具调用;
 
-DiffCOT 是一个基于LLM的智能代码审查系统，支持对 GitHub Pull Request 进行自动化代码审查，结合静态分析工具 Semgrep 和 通用大模型分析能力，发现代码中的潜在问题。
-
-**Greptile - Benchmark 测试报告可见 [评测报告](./docs/benchmark_result.md)**
+### **Greptile - Benchmark 评测报告可见 [评测报告](./docs/benchmark_result.md)**
+### **Greptile - 技术报告可见 [技术报告](./docs/diffCoT技术报告.pdf)**
 
 ## 目录
 
@@ -34,7 +36,7 @@ DiffCOT 是一个基于LLM的智能代码审查系统，支持对 GitHub Pull Re
 
 ### 🔍 多维度智能分析
 - **静态分析 + AI 审查并行**：Semgrep 扫描安全漏洞，LLM 理解代码意图，双管齐下
-- **意图分析**：先理解 PR 要做什么，再评估实现是否正确
+- **意图分析**：专门的意图解析器设计，先理解 PR 要做什么，再评估实现是否正确
 - **跨文件验证**：自动追踪新增 import，检查 API 调用是否正确
 
 ### ⚡ 高效处理大型 PR
@@ -352,7 +354,7 @@ flowchart TB
     style Clients fill:#f1f8e9
 ```
 
-## 自定义规则
+## 自定义规则-知识库的增量更新
 
 ### Semgrep 规则
 
