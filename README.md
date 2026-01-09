@@ -10,7 +10,7 @@ DiffCOT 是一个基于LLM的智能代码审查系统，支持对 GitHub Pull Re
 > 关键词: Agent; 知识库;工具调用;
 
 ### **Greptile - Benchmark 评测报告可见 [评测报告](./docs/benchmark_result.md)**
-### **Greptile - 技术报告可见 [技术报告](./docs/diffCoT技术报告.pdf)**
+### **Greptile - 技术报告可见 [技术报告](./docs/diffCoT技术报告.md)**
 
 ## 目录
 
