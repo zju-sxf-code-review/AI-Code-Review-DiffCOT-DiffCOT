@@ -39,38 +39,54 @@ let backendProcess: ChildProcess | null = null;
 
 /**
  * 获取后端可执行文件路径
+ * 统一处理 Windows (.exe) 和 macOS/Linux 的路径查找
  */
 function getBackendPath(): string | null {
   const isPackaged = app.isPackaged;
 
-  if (isPackaged) {
-    // 打包后的路径
-    const resourcesPath = process.resourcesPath;
-    const platform = process.platform;
-
-    let backendName = 'diffcot-backend';
-    if (platform === 'win32') {
-      backendName += '.exe';
-    }
-
-    const backendPath = path.join(resourcesPath, 'backend', backendName);
-
-    if (existsSync(backendPath)) {
-      return backendPath;
-    }
-
-    // 尝试其他可能的路径
-    const altPath = path.join(resourcesPath, 'backend', 'diffcot-backend', backendName);
-    if (existsSync(altPath)) {
-      return altPath;
-    }
-
-    console.error('Backend executable not found at:', backendPath);
-    return null;
-  } else {
-    // 开发模式：不自动启动后端，需要手动运行
+  if (!isPackaged) {
+    console.log('Development mode: Backend should be started manually');
     return null;
   }
+
+  const resourcesPath = process.resourcesPath;
+  console.log('Looking for backend in resourcesPath:', resourcesPath);
+
+  // 统一查找：同时尝试有无 .exe 扩展名
+  const backendNames = ['diffcot-backend.exe', 'diffcot-backend'];
+  const basePaths = [
+    path.join(resourcesPath, 'backend'),
+    path.join(resourcesPath, 'backend-dist'),
+    path.join(resourcesPath, 'backend', 'diffcot-backend'),
+    path.join(resourcesPath, 'backend-dist', 'diffcot-backend'),
+    resourcesPath,
+  ];
+
+  // 先列出 resources 目录内容
+  try {
+    const { readdirSync } = require('fs');
+    console.log('Contents of resources:', readdirSync(resourcesPath));
+    for (const bp of basePaths) {
+      if (existsSync(bp)) {
+        console.log(`Contents of ${bp}:`, readdirSync(bp));
+      }
+    }
+  } catch (e) {
+    console.error('Error listing directories:', e);
+  }
+
+  for (const basePath of basePaths) {
+    for (const name of backendNames) {
+      const fullPath = path.join(basePath, name);
+      if (existsSync(fullPath)) {
+        console.log('Found backend at:', fullPath);
+        return fullPath;
+      }
+    }
+  }
+
+  console.error('Backend not found. Searched in:', basePaths);
+  return null;
 }
 
 /**
@@ -81,34 +97,33 @@ function startBackend(): Promise<void> {
     const backendPath = getBackendPath();
 
     if (!backendPath) {
-      console.log('Development mode: Backend should be started manually');
       resolve();
       return;
     }
 
-    console.log('Starting backend from:', backendPath);
-    console.log('Backend exists:', existsSync(backendPath));
+    console.log('Starting backend:', backendPath);
 
-    // 获取后端所在目录（用于设置 cwd）
     const backendDir = path.dirname(backendPath);
-    console.log('Backend directory:', backendDir);
-
-    // 设置环境变量
     const env = {
       ...process.env,
       DIFFCOT_DATA_DIR: path.join(app.getPath('userData'), 'data'),
     };
 
-    // 启动后端进程
-    // 设置 cwd 为后端目录，确保能找到 _internal 中的依赖
-    backendProcess = spawn(backendPath, [], {
+    const spawnOptions: any = {
       env,
       cwd: backendDir,
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: false,
-    });
+    };
 
-    // 监听输出
+    // Windows 特定配置
+    if (process.platform === 'win32') {
+      spawnOptions.shell = true;
+      spawnOptions.windowsHide = true;
+    }
+
+    backendProcess = spawn(backendPath, [], spawnOptions);
+
     backendProcess.stdout?.on('data', (data) => {
       console.log(`[Backend] ${data.toString().trim()}`);
     });
@@ -123,14 +138,12 @@ function startBackend(): Promise<void> {
     });
 
     backendProcess.on('close', (code) => {
-      console.log(`Backend process exited with code ${code}`);
+      console.log(`Backend exited with code ${code}`);
       backendProcess = null;
     });
 
     // 等待后端启动
-    setTimeout(() => {
-      resolve();
-    }, 2000);
+    setTimeout(resolve, 2000);
   });
 }
 
